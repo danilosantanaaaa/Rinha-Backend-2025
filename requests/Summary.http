@@ -1,0 +1,4 @@
+GET http://localhost:5056/payments-summary?from=2020-07-10T12:34:56.000Z&to=2026-07-10T12:35:56.000Z
+
+###
+GET http://localhost:9999/payments-summary?from=2020-07-10T12:34:56.000Z&to=2026-07-10T12:35:56.000Z

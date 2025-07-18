@@ -1,0 +1,8 @@
+POST http://localhost:5056/payments
+#POST http://localhost:9999/payments
+Content-Type: application/json
+
+{
+    "CorrelationId": "27dd44e6-0ee9-4f78-861f-10d4f670306c",
+    "Amount": 300
+}
