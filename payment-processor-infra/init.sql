@@ -1,5 +1,5 @@
-CREATE UNLOGGED
-TABLE payments (
+
+CREATE UNLOGGED TABLE payments (
     correlationId UUID PRIMARY KEY,
     amount DECIMAL NOT NULL,
     requested_at TIMESTAMP NOT NULL

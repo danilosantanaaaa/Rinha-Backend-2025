@@ -16,4 +16,6 @@ public class DatabaseConnection
 
     public IDbConnection GetConnection() => new NpgsqlConnection(_configuration.GetConnectionString("PostgreSQL"))
         ?? throw new InvalidOperationException("Database connection string is not configured.");
+
+
 }

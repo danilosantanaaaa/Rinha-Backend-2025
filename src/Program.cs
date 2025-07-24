@@ -18,32 +18,38 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddProblemDetails();
 
-builder.Services.AddHttpClient(nameof(PaymentProcessorType.Default), client =>
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.InstanceName = "RinhaPaymentCache";
+});
+
+builder.Services.AddHttpClient(nameof(PaymentGateway.Default), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorDefault"]!);
 });
 
-builder.Services.AddHttpClient(nameof(PaymentProcessorType.Fallback), client =>
+builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorFallback"]!);
 });
 
-builder.Services.AddSingleton<HealthStatus>();
+builder.Services.AddSingleton(
+    Channel.CreateUnbounded<PaymentRequest>(new UnboundedChannelOptions
+    {
+        SingleReader = false,
+        SingleWriter = false
+    }));
+
 builder.Services.AddSingleton<DatabaseConnection>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<PaymentProcessorClient>();
 builder.Services.AddScoped<PaymentRepository>();
 
-builder.Services.AddSingleton(
-    Channel.CreateUnbounded<PaymentRequest>(
-    new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        AllowSynchronousContinuations = false
-    }));
-
-// builder.Services.AddHostedService<HealthBackgroundService>();
+builder.Services.AddSingleton<HealthSummary>();
+builder.Services.AddHostedService<HealthBackgroundService>();
 builder.Services.AddHostedService<PaymentBackgroundService>();
+ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
 
 var app = builder.Build();
 
@@ -65,7 +71,10 @@ app.MapPost("payments", async (
     return Results.Ok();
 });
 
-app.MapGet("payments-summary", async ([FromServices] PaymentService paymentService, [FromQuery] DateTime from, [FromQuery] DateTime to) =>
+app.MapGet("payments-summary", async (
+    [FromServices] PaymentService paymentService,
+    [FromQuery] DateTime from,
+    [FromQuery] DateTime to) =>
 {
     var result = await paymentService.GetSummaryAsync(from, to);
 

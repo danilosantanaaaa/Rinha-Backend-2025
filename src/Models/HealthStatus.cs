@@ -1,15 +1,17 @@
 namespace Rinha.Api.Models;
 
-public class HealthStatus
+public record HealthStatus(
+    PaymentGateway Default,
+    HealthResponse HealthResponse);
+
+public record HealthSummary
 {
-    public PaymentProcessorType Default { get; set; }
-    public PaymentProcessorType Fallback { get; set; }
-    public bool Failing { get; set; }
-    public int MinResponseTime { get; set; }
+    public HealthStatus Default { get; private set; } = new(PaymentGateway.Default, new HealthResponse(false, 0));
+    public HealthStatus Fallback { get; private set; } = new(PaymentGateway.Fallback, new HealthResponse(false, 0));
 
     public void Set(
-        PaymentProcessorType @default,
-        PaymentProcessorType fallback)
+        HealthStatus @default,
+        HealthStatus fallback)
     {
         Default = @default;
         Fallback = fallback;

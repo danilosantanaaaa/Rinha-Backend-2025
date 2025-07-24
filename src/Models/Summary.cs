@@ -1,7 +1,7 @@
 namespace Rinha.Api.Models;
 
 public record Summary(
-    PaymentProcessorType Type,
+    PaymentGateway Type,
     int TotalRequests,
     decimal TotalAmount)
 {
