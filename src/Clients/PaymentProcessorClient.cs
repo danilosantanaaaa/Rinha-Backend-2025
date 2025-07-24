@@ -58,8 +58,7 @@ public class PaymentProcessorClient(
                 JsonConvert.SerializeObject(health),
                 new DistributedCacheEntryOptions
                 {
-                    SlidingExpiration = TimeSpan.FromSeconds(5),
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(10)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5)
                 },
                 cancellationToken);
 
@@ -69,6 +68,10 @@ public class PaymentProcessorClient(
         {
             Console.WriteLine($"Failed to get health from {gateway} payment processor. Using fallback.");
             return new HealthResponse(true, 0);
+        }
+        finally
+        {
+            client.Dispose();
         }
     }
 

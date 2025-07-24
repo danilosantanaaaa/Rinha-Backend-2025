@@ -3,6 +3,7 @@ name: DaniloSantanaRB2025
 services:
 
   load-balancer:
+    container_name: load-balancer
     image: nginx:latest
     ports:
       - "9999:9999"
@@ -20,6 +21,7 @@ services:
           memory: "40MB"
 
   api-1: &api-service
+    container_name: api-1
     build: .
     #image: danilosantanaaa/rinha:2025.2
     expose:
@@ -31,12 +33,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
-      - ConnectionStrings__PostgreSQL=User Id=postgres;Password=postgres;Server=rinha-db;Port=5432;Database=rinha
+      - ConnectionStrings__PostgreSQL=User Id=postgres;Password=postgres;Server=postgreSQL;Port=5432;Database=rinha
       - PaymentProcessorDefault=http://payment-processor-default:8080
       - PaymentProcessorFallback=http://payment-processor-fallback:8080
-      - DOTNET_ENVIRONMENT=Production
     depends_on:
-      - rinha-db
+      - postgreSQL
       - redis
     networks:
       - backend
@@ -48,21 +49,31 @@ services:
           memory: "95MB"
   api-2:
     <<: *api-service
+    container_name: api-2
     ports:
-      - "8080"
+      - "3002:8080"
     hostname: api-2
-
+    
   redis:
-    image: redis:7.2-alpine
+    container_name: cache
+    hostname: redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
     networks:
       - backend
+    volumes:
+      - redis_data:/data
+    restart: always
     deploy:
       resources:
         limits:
           cpus: "0.2"
           memory: "20MB"
 
-  rinha-db:
+  postgreSQL:
+    container_name: database
+    hostname: postgreSQL
     image: postgres:17-alpine
     networks:
       - backend
@@ -116,7 +127,7 @@ services:
     networks:
       - backend
     depends_on:
-      - rinha-db
+      - postgreSQL
 
 networks:
   backend:
@@ -127,3 +138,6 @@ networks:
     name: payment-processor
     driver: bridge
     external: true
+
+volumes:
+  redis_data: {}

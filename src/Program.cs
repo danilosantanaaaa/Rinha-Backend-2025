@@ -10,6 +10,8 @@ using Rinha.Api.Repositories;
 using Rinha.Api.Services;
 using Rinha.Api.Workers;
 
+using StackExchange.Redis;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -49,7 +51,7 @@ builder.Services.AddScoped<PaymentRepository>();
 builder.Services.AddSingleton<HealthSummary>();
 builder.Services.AddHostedService<HealthBackgroundService>();
 builder.Services.AddHostedService<PaymentBackgroundService>();
-ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
+//ThreadPool.SetMinThreads(Environment.ProcessorCount * 4, Environment.ProcessorCount * 4);
 
 var app = builder.Build();
 

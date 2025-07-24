@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Rinha.Api.Clients;
 using Rinha.Api.Models;
 
@@ -5,9 +7,11 @@ namespace Rinha.Api.Workers;
 
 public class HealthBackgroundService(
     HealthSummary healthSummary,
-    IServiceScopeFactory serviceScopeFactory) : BackgroundService
+    IServiceScopeFactory serviceScopeFactory,
+    ILogger<HealthBackgroundService> logger) : BackgroundService
 {
     private readonly HealthSummary _healthSummary = healthSummary;
+    private readonly ILogger<HealthBackgroundService> _logger = logger;
     private readonly PaymentProcessorClient _client =
         serviceScopeFactory.CreateScope().ServiceProvider.GetRequiredService<PaymentProcessorClient>();
 
@@ -31,10 +35,10 @@ public class HealthBackgroundService(
                     new HealthStatus(PaymentGateway.Default, new HealthResponse(false, 0)),
                     new HealthStatus(PaymentGateway.Fallback, new HealthResponse(false, 0)));
 
-                Console.WriteLine($"Failed to get health from payment processors: {ex.Message}");
+                _logger.LogError($"Failed to get health from payment processors: {ex.Message}", ex);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
     }
 }

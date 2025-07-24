@@ -1,15 +1,15 @@
 # Build Processor Payment
-cd payment-processor-infra
+Set-Location payment-processor-infra
 docker compose down -v
 docker compose up -d
 
 # Buld Back-end
-cd ..
+Set-Location ..
 dotnet build
-docker compose build --no-cache
 docker compose down -v
+docker compose build --no-cache
 docker compose up -d
 
 # Realizar os teste
-cd .\rinha-test
+Set-Location .\rinha-test
 k6 run -e MAX_REQUESTS=550 .\rinha.js
