@@ -1,27 +1,22 @@
-using System.Threading.Channels;
-
 using Polly;
 using Polly.Timeout;
 
-using Rinha.Api.Clients;
-using Rinha.Api.Helpers;
-using Rinha.Api.Models;
 using Rinha.Api.Repositories;
 
 namespace Rinha.Api.Services;
 
 public class PaymentService(
     PaymentRepository paymentRepository,
-    PaymentProcessorClient paymentProcessorClient,
+    PaymentGatewayClient paymentProcessorClient,
     ILogger<PaymentService> logger,
     HealthSummary health,
-    Channel<PaymentRequest> channel)
+    [FromKeyedServices(Constaint.PaymentRetry)] MessageQueue<PaymentRequest> paymentRetryQueue)
 {
     private readonly PaymentRepository _paymentRepository = paymentRepository;
-    private readonly PaymentProcessorClient _paymentProcessorClient = paymentProcessorClient;
+    private readonly PaymentGatewayClient _paymentProcessorClient = paymentProcessorClient;
     private readonly ILogger<PaymentService> _logger = logger;
     private readonly HealthSummary _health = health;
-    private readonly Channel<PaymentRequest> _channel = channel;
+    private readonly MessageQueue<PaymentRequest> _paymentRetryQueue = paymentRetryQueue;
 
     public async Task ProcessAsync(
         PaymentRequest request,
@@ -32,84 +27,75 @@ public class PaymentService(
             request.Amount,
             DateTime.Now);
 
-        PaymentGateway bestServer = PaymentGateway.Default;
-
-        while (true)
+        PaymentGateway bestServer = GetBestGateway();
+        HttpResponseMessage? response = null;
+        try
         {
-            try
+            for (int attempt = 0; attempt < 3; attempt++)
             {
-                // Printar os healts abaixo com console default e fallback
-                Console.WriteLine($"Health Default: {_health.Default.HealthResponse}");
-                Console.WriteLine($"Health Fallback: {_health.Fallback.HealthResponse}");
-                Console.WriteLine("-----------------------------------");
-
-                _logger.LogInformation($"Attempt to process payment with strategy {bestServer}");
-
-                if (IsBothGatewaysUnhealthy())
+                if (_health.IsBothGatewaysUnhealthy())
                 {
-                    _logger.LogWarning("Both payment processors are failing. Requeuing request.");
-                    await _channel.Writer.WriteAsync(request, cancellationToken);
+                    throw new InvalidOperationException("Both payment processors are failing.");
+                }
+
+                response = await SendPaymentToGateway(
+                    payment,
+                    bestServer,
+                    cancellationToken);
+
+                if (response?.IsSuccessStatusCode ?? false)
+                {
+                    _logger.LogInformation($"Payment {request.CorrelationId} processed successfully with strategy {bestServer}");
+                    await _paymentRepository.AddAsync(payment, bestServer);
                     return;
                 }
 
-                bestServer = GetBestGateway();
-                var result = await SendPaymentToGateway(payment, bestServer, cancellationToken);
-
-                if (!result.IsSuccessStatusCode)
-                {
-                    throw new HttpRequestException(
-                        $"Payment request {bestServer} failed with status code {result.StatusCode}");
-
-                }
-
-                // Salvando no banco de dados
-                await _paymentRepository.AddAsync(payment, bestServer);
-                return;
-
+                bestServer = bestServer == PaymentGateway.Default
+                    ? PaymentGateway.Fallback
+                    : PaymentGateway.Default;
             }
-            catch (Exception ex)
+
+            if (response?.IsSuccessStatusCode ?? false)
             {
-                _logger.LogError(ex, "Failed to process payment request after retries. Request requeued.");
+                throw new InvalidOperationException($"Payment {request.CorrelationId} failed after 3 attempts with strategy {bestServer}");
             }
+
         }
-
+        catch (Exception ex)
+        {
+            await _paymentRetryQueue.EnqueueAsync(request, cancellationToken);
+            _logger.LogError(ex.Message, ex);
+        }
     }
 
-    public async Task<SummaryResponse> GetSummaryAsync(DateTime from, DateTime to)
+    public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset from, DateTimeOffset to)
     {
-        return await _paymentRepository.GetSummaryAsync(from, to);
-    }
-
-    private bool IsBothGatewaysUnhealthy()
-    {
-        return _health.Default.HealthResponse.Failing && _health.Fallback.HealthResponse.Failing;
+        return await _paymentRepository.GetSummaryAsync(from.UtcDateTime, to.UtcDateTime);
     }
 
     private PaymentGateway GetBestGateway()
     {
-
-        HealthResponse healthDefault = _health.Default.HealthResponse;
-        HealthResponse healthFallback = _health.Fallback.HealthResponse;
+        HealthResponse def = _health.Default;
+        HealthResponse fal = _health.Fallback;
 
         // Verificando se ambos os servidores estão com problemas
-        if (!healthDefault.IsHealthy && !healthFallback.IsHealthy)
+        if (!def.IsHealthy && !fal.IsHealthy)
         {
             throw new InvalidOperationException("Both payment processors are failing.");
         }
 
-        // Verificando se o servidor default é saudável e ainda é rapido o suficiente para mandar request
-        if (healthDefault.IsHealthy && healthDefault.MinResponseTime <= 100)
+        if (!def.IsHealthy && def.MinResponseTime <= 100)
         {
             return PaymentGateway.Default;
         }
 
         // Verificando se o servidor fallback é mais rápido que o default
-        if (healthDefault.IsHealthy && healthFallback.IsHealthy && healthDefault.MinResponseTime > 1.7 * healthFallback.MinResponseTime)
+        if (def.IsHealthy && fal.IsHealthy && def.MinResponseTime > 1.7 * fal.MinResponseTime)
         {
             return PaymentGateway.Fallback;
         }
 
-        if (healthDefault.IsHealthy)
+        if (def.IsHealthy)
         {
             return PaymentGateway.Default;
         }
@@ -117,26 +103,38 @@ public class PaymentService(
         return PaymentGateway.Fallback;
     }
 
-    private async Task<HttpResponseMessage> SendPaymentToGateway(
+    private async Task<HttpResponseMessage?> SendPaymentToGateway(
         Payment payment,
         PaymentGateway gateway,
         CancellationToken cancellationToken)
     {
+
+        HttpResponseMessage? response = null;
+
         // Criando pipeline
         AsyncTimeoutPolicy timeOut = Policy.TimeoutAsync(
             TimeSpan.FromMilliseconds(5000),
             TimeoutStrategy.Pessimistic,
             (context, timeout, _, exception) =>
             {
-                Console.WriteLine($"{gateway}: {"{}:Timeout",-10}{timeout,-10:ss\\.fff}: {exception.GetType().Name}");
+                _logger.LogInformation($"{gateway}: {"{}:Timeout",-10}{timeout,-10:ss\\.fff}: {exception.GetType().Name}");
                 return Task.CompletedTask;
             });
 
-        return await timeOut.ExecuteAsync(async token =>
+        try
+        {
+            response = await timeOut.ExecuteAsync(async token =>
                 await _paymentProcessorClient.PaymentAsync(
                     payment,
                     gateway),
                 cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex.Message, ex);
+        }
+
+        return response;
     }
 
 }

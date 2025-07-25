@@ -2,16 +2,16 @@ using Microsoft.Extensions.Caching.Distributed;
 
 using Newtonsoft.Json;
 
-using Rinha.Api.Models;
-
 namespace Rinha.Api.Clients;
 
-public class PaymentProcessorClient(
+public class PaymentGatewayClient(
     IHttpClientFactory httpClientFactory,
-    IDistributedCache cache)
+    IDistributedCache cache,
+    ILogger<PaymentGatewayClient> logger)
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IDistributedCache _cache = cache;
+    private readonly ILogger<PaymentGatewayClient> _logger = logger;
 
     public async Task<HttpResponseMessage> PaymentAsync(
         Payment payment,
@@ -19,14 +19,22 @@ public class PaymentProcessorClient(
         CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
-        var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
-
-        if (!result.IsSuccessStatusCode)
+        try
         {
-            throw new HttpRequestException($"Failed to process payment: {result.ReasonPhrase}");
+            var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
+
+            if (!result.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"Failed to process payment: {result.ReasonPhrase}");
+            }
+
+            return result;
+        }
+        finally
+        {
+            client.Dispose();
         }
 
-        return result;
     }
 
     public async Task<HealthResponse> GetHealthAsync(
@@ -58,15 +66,15 @@ public class PaymentProcessorClient(
                 JsonConvert.SerializeObject(health),
                 new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMilliseconds(5000) // Cache for 5 seconds,
                 },
                 cancellationToken);
 
             return health;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            Console.WriteLine($"Failed to get health from {gateway} payment processor. Using fallback.");
+            _logger.LogError($"Failed to get health from '{gateway}' payment processor.", ex);
             return new HealthResponse(true, 0);
         }
         finally

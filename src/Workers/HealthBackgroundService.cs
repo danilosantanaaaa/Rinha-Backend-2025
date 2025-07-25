@@ -1,8 +1,3 @@
-using System.Diagnostics;
-
-using Rinha.Api.Clients;
-using Rinha.Api.Models;
-
 namespace Rinha.Api.Workers;
 
 public class HealthBackgroundService(
@@ -12,33 +7,63 @@ public class HealthBackgroundService(
 {
     private readonly HealthSummary _healthSummary = healthSummary;
     private readonly ILogger<HealthBackgroundService> _logger = logger;
-    private readonly PaymentProcessorClient _client =
-        serviceScopeFactory.CreateScope().ServiceProvider.GetRequiredService<PaymentProcessorClient>();
+    private readonly PaymentGatewayClient _client =
+        serviceScopeFactory.CreateScope().ServiceProvider.GetRequiredService<PaymentGatewayClient>();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var tasks = new List<Task>()
+        {
+            Task.Run(() => GetHealthDefault(stoppingToken)),
+            Task.Run(() => GetHealthFallback(stoppingToken))
+        };
+
+        await Task.WhenAll(tasks);
+    }
+
+    private async Task GetHealthDefault(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                var healthDefault = await _client.GetHealthAsync(PaymentGateway.Default);
-                var healthFallback = await _client.GetHealthAsync(PaymentGateway.Fallback);
+                var @default = await _client.GetHealthAsync(
+                    PaymentGateway.Default,
+                    stoppingToken);
 
-                var @default = new HealthStatus(PaymentGateway.Default, healthDefault);
-                var @fallback = new HealthStatus(PaymentGateway.Fallback, healthFallback);
-
-                _healthSummary.Set(@default, fallback);
+                _healthSummary.SetDefault(@default);
             }
             catch (Exception ex)
             {
-                _healthSummary.Set(
-                    new HealthStatus(PaymentGateway.Default, new HealthResponse(false, 0)),
-                    new HealthStatus(PaymentGateway.Fallback, new HealthResponse(false, 0)));
+                _healthSummary.SetDefault(
+                    new HealthResponse(false, 0));
+
+                _logger.LogError($"Failed to get health from payment processors: {ex.Message}", ex);
+            }
+        }
+    }
+
+    private async Task GetHealthFallback(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var fallback = await _client.GetHealthAsync(
+                    PaymentGateway.Fallback,
+                    stoppingToken);
+
+                _healthSummary.SetFallback(fallback);
+            }
+            catch (Exception ex)
+            {
+                _healthSummary.SetFallback(
+                   new HealthResponse(false, 0));
 
                 _logger.LogError($"Failed to get health from payment processors: {ex.Message}", ex);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            //await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }
 }

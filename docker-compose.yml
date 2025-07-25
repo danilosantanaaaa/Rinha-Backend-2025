@@ -30,7 +30,7 @@ services:
       - "3001:8080"
     hostname: api-1
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
       - ConnectionStrings__PostgreSQL=User Id=postgres;Password=postgres;Server=postgreSQL;Port=5432;Database=rinha
@@ -62,8 +62,6 @@ services:
       - "6379:6379"
     networks:
       - backend
-    volumes:
-      - redis_data:/data
     restart: always
     deploy:
       resources:
@@ -138,6 +136,3 @@ networks:
     name: payment-processor
     driver: bridge
     external: true
-
-volumes:
-  redis_data: {}

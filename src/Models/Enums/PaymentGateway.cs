@@ -1,4 +1,4 @@
-namespace Rinha.Api;
+namespace Rinha.Api.Models.Enums;
 
 public enum PaymentGateway
 {
