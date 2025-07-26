@@ -3,6 +3,6 @@ POST http://localhost:5056/payments
 Content-Type: application/json
 
 {
-    "CorrelationId": "5f8c1a05-ace8-4a4f-8260-b1e07410d430",
+    "CorrelationId": "999790a4-4ed0-4d0a-97eb-5665096e9068",
     "Amount": 300
 }

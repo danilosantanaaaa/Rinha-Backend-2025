@@ -1,0 +1,1 @@
+Redis docker: docker run -p 6379:6379 -p 8004:8001 --name redis_rinha_teste -d redis/redis-stack:latest

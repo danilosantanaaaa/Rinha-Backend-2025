@@ -11,8 +11,8 @@ public class PaymentBackgroundService : BackgroundService
     private readonly HealthSummary _health;
 
     public PaymentBackgroundService(
-        [FromKeyedServices(Constaint.PaymentQueue)] MessageQueue<PaymentRequest> paymentQueue,
-        [FromKeyedServices(Constaint.PaymentRetry)] MessageQueue<PaymentRequest> paymentRetryQueue,
+        [FromKeyedServices(Configuration.PaymentQueue)] MessageQueue<PaymentRequest> paymentQueue,
+        [FromKeyedServices(Configuration.PaymentRetry)] MessageQueue<PaymentRequest> paymentRetryQueue,
         IServiceScopeFactory scopeFactory,
         ILogger<PaymentBackgroundService> logger,
         HealthSummary health)
@@ -39,7 +39,7 @@ public class PaymentBackgroundService : BackgroundService
         }
 
         // Start multiple retry tasks to handle retries concurrently
-        for (var i = 20; i < 25; i++)
+        for (var i = 20; i < 30; i++)
         {
             tasks.Add(RetryPaymentAsync(i, stoppingToken));
         }
@@ -49,40 +49,37 @@ public class PaymentBackgroundService : BackgroundService
 
     private async Task ProcessPaymentAsync(int workId, CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Worker Id {WorkerId} started processing payments", workId);
+        _logger.LogInformation("Payment Worker Id {WorkerId} started processing payments", workId);
         while (await _paymentQueue.WaitToReadAsync(stoppingToken))
         {
             try
             {
-                if (_health.IsAnyGatewayHealthy())
-                {
-                    var request = await _paymentQueue.DequeueAsync(stoppingToken);
-                    await _paymentService.ProcessAsync(request, stoppingToken);
-                }
+
+                var request = await _paymentQueue.DequeueAsync(stoppingToken);
+                await _paymentService.ProcessAsync(request, stoppingToken);
+
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing payment request");
+                _logger.LogError(ex.Message, ex);
             }
         }
     }
 
     private async Task RetryPaymentAsync(int workId, CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Worker Id {WorkerId} started processing payments", workId);
+        _logger.LogInformation("Retry Worker Id {WorkerId} started processing payments", workId);
         while (await _paymentRetryQueue.WaitToReadAsync(stoppingToken))
         {
             try
             {
-                if (_health.IsAnyGatewayHealthy())
-                {
-                    var request = await _paymentRetryQueue.DequeueAsync(stoppingToken);
-                    await _paymentService.ProcessAsync(request, stoppingToken);
-                }
+                var request = await _paymentRetryQueue.DequeueAsync(stoppingToken);
+                await _paymentService.ProcessAsync(request, stoppingToken);
+
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error retrying payment request");
+                _logger.LogError(ex.Message, ex);
             }
         }
     }

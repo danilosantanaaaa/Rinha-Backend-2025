@@ -21,15 +21,15 @@ public class PaymentRepository(DatabaseConnection connection)
         _context.Dispose();
     }
 
-    public async Task<SummaryResponse> GetSummaryAsync(DateTime fromUtc, DateTime toUtc)
+    public async Task<SummaryResponse> GetSummaryAsync(DateTime? fromUtc, DateTime? toUtc)
     {
         const string sql = @"
                 SELECT gateway,
                     COUNT(*) AS TotalRequests,
                     SUM(amount) AS TotalAmount
                 FROM payments
-                WHERE (@from IS NULL OR requested_at >= @from)
-                AND (@to IS NULL OR requested_at <= @to)
+                WHERE (@fromUtc IS NULL OR requested_at >= @fromUtc)
+                AND (@toUtc IS NULL OR requested_at <= @toUtc)
                 GROUP BY gateway;";
 
         var _context = connection.GetConnection();

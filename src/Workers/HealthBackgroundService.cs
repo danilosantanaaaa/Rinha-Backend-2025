@@ -1,3 +1,5 @@
+using Rinha.Api.Services;
+
 namespace Rinha.Api.Workers;
 
 public class HealthBackgroundService(
@@ -14,8 +16,8 @@ public class HealthBackgroundService(
     {
         var tasks = new List<Task>()
         {
-            Task.Run(() => GetHealthDefault(stoppingToken)),
-            Task.Run(() => GetHealthFallback(stoppingToken))
+            GetHealthDefault(stoppingToken),
+            GetHealthFallback(stoppingToken)
         };
 
         await Task.WhenAll(tasks);
@@ -23,6 +25,7 @@ public class HealthBackgroundService(
 
     private async Task GetHealthDefault(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Health check payment processor default");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -40,11 +43,14 @@ public class HealthBackgroundService(
 
                 _logger.LogError($"Failed to get health from payment processors: {ex.Message}", ex);
             }
+
+            SetBestGateway();
         }
     }
 
     private async Task GetHealthFallback(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Health check payment processor fallback");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -63,7 +69,41 @@ public class HealthBackgroundService(
                 _logger.LogError($"Failed to get health from payment processors: {ex.Message}", ex);
             }
 
-            //await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            SetBestGateway();
         }
+    }
+
+    private void SetBestGateway()
+    {
+        HealthResponse def = _healthSummary.Default;
+        HealthResponse fal = _healthSummary.Fallback;
+
+        // Verificando se ambos os servidores estão com problemas
+        if (_healthSummary.IsBothGatewaysUnhealthy())
+        {
+            PaymentService.Gateway = PaymentGateway.Default;
+            return;
+        }
+
+        if (def.IsHealthy && def.MinResponseTime <= 100)
+        {
+            PaymentService.Gateway = PaymentGateway.Default;
+            return;
+        }
+
+        // Verificando se o servidor fallback é mais rápido que o default
+        if (def.IsHealthy && fal.IsHealthy && def.MinResponseTime > fal.MinResponseTime)
+        {
+            PaymentService.Gateway = PaymentGateway.Fallback;
+            return;
+        }
+
+        if (def.IsHealthy)
+        {
+            PaymentService.Gateway = PaymentGateway.Default;
+            return;
+        }
+
+        PaymentService.Gateway = PaymentGateway.Default;
     }
 }

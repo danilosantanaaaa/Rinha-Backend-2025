@@ -13,3 +13,5 @@ docker compose up -d
 # Realizar os teste
 Set-Location .\rinha-test
 k6 run -e MAX_REQUESTS=550 .\rinha.js
+
+Set-Location ..\

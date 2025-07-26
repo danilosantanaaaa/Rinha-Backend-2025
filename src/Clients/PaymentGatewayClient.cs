@@ -2,6 +2,8 @@ using Microsoft.Extensions.Caching.Distributed;
 
 using Newtonsoft.Json;
 
+using Rinha.Api.Services;
+
 namespace Rinha.Api.Clients;
 
 public class PaymentGatewayClient(
@@ -19,6 +21,7 @@ public class PaymentGatewayClient(
         CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
+        client.Timeout = TimeSpan.FromMilliseconds(1000);
         try
         {
             var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
@@ -37,25 +40,54 @@ public class PaymentGatewayClient(
 
     }
 
+    public async Task<Payment?> GetByCorrelationIdAsync(
+        Guid correlationId,
+        PaymentGateway gateway = PaymentGateway.Default,
+        CancellationToken cancellationToken = default)
+    {
+        HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
+
+        try
+        {
+            var response = await client.GetAsync(
+                $"payments/{correlationId}",
+                cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<Payment?>(
+                cancellationToken: cancellationToken);
+
+        }
+        finally
+        {
+            client.Dispose();
+        }
+    }
+
     public async Task<HealthResponse> GetHealthAsync(
        PaymentGateway gateway = PaymentGateway.Default,
        CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
 
-        var healthCached = await _cache.GetStringAsync(
-            gateway.ToString(),
-            token: cancellationToken);
-
-        HealthResponse health;
-
-        if (!string.IsNullOrEmpty(healthCached))
-        {
-            return JsonConvert.DeserializeObject<HealthResponse>(healthCached)!;
-        }
-
         try
         {
+            var healthCached = await _cache.GetStringAsync(
+                gateway.ToString(),
+                token: cancellationToken);
+
+            HealthResponse health;
+
+            if (!string.IsNullOrEmpty(healthCached))
+            {
+                return JsonConvert.DeserializeObject<HealthResponse>(healthCached)!;
+            }
+
+            PaymentService.Gateway = PaymentGateway.Default;
+
             health = await client.GetFromJsonAsync<HealthResponse>(
                 "payments/service-health",
                 cancellationToken: cancellationToken)
@@ -66,7 +98,7 @@ public class PaymentGatewayClient(
                 JsonConvert.SerializeObject(health),
                 new DistributedCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMilliseconds(5000) // Cache for 5 seconds,
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMilliseconds(5000)
                 },
                 cancellationToken);
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-using Rinha.Api;
 using Rinha.Api.Repositories;
 using Rinha.Api.Services;
 using Rinha.Api.Workers;
@@ -27,8 +27,8 @@ builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorFallback"]!);
 });
 
-builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Constaint.PaymentQueue);
-builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Constaint.PaymentRetry);
+builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Configuration.PaymentQueue);
+builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Configuration.PaymentRetry);
 
 builder.Services.AddSingleton<DatabaseConnection>();
 builder.Services.AddScoped<PaymentService>();
@@ -38,6 +38,7 @@ builder.Services.AddScoped<PaymentRepository>();
 builder.Services.AddSingleton<HealthSummary>();
 builder.Services.AddHostedService<HealthBackgroundService>();
 builder.Services.AddHostedService<PaymentBackgroundService>();
+ThreadPool.SetMinThreads(64, 64);
 
 var app = builder.Build();
 
@@ -52,7 +53,7 @@ app.UseExceptionHandler();
 
 app.MapPost("payments", async (
     [FromBody] PaymentRequest request,
-    [FromKeyedServices(Constaint.PaymentQueue)] MessageQueue<PaymentRequest> queue) =>
+    [FromKeyedServices(Configuration.PaymentQueue)] MessageQueue<PaymentRequest> queue) =>
 {
     await queue.EnqueueAsync(request);
 
@@ -61,8 +62,8 @@ app.MapPost("payments", async (
 
 app.MapGet("payments-summary", async (
     [FromServices] PaymentService paymentService,
-    [FromQuery] DateTimeOffset from,
-    [FromQuery] DateTimeOffset to) =>
+    [FromQuery] DateTime? from,
+    [FromQuery] DateTime? to) =>
 {
     var result = await paymentService.GetSummaryAsync(from, to);
     return Results.Ok(result);
