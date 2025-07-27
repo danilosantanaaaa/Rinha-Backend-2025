@@ -17,13 +17,13 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.2"
           memory: "40MB"
 
   api-1: &api-service
     container_name: api-1
-    build: .
-    #image: danilosantanaaa/rinha:2025.2
+    #build: .
+    image: danilosantanaaa/rinha:2025.3
     expose:
       - "8080"
     ports:
@@ -32,7 +32,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - ConnectionStrings__Redis=redis:6379
       - ConnectionStrings__PostgreSQL=User Id=postgres;Password=postgres;Server=postgreSQL;Port=5432;Database=rinha
       - PaymentProcessorDefault=http://payment-processor-default:8080
       - PaymentProcessorFallback=http://payment-processor-fallback:8080
@@ -45,7 +45,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.45"
           memory: "95MB"
   api-2:
     <<: *api-service
@@ -66,7 +66,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
+          cpus: "0.1"
           memory: "20MB"
 
   postgreSQL:
@@ -86,7 +86,7 @@ services:
     command: >
       postgres
       -c fsync=off
-      -c work_mem=64MB
+      -c work_mem=100MB
       -c synchronous_commit=off
       -c wal_level=minimal
       -c max_wal_senders=0
@@ -101,37 +101,10 @@ services:
           cpus: "0.3"
           memory: "100MB"
 
-  # Serviço de monitoramentos e métricas
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    restart: always
-    entrypoint: > # Before the entrypoint phase, just need to set owner and permissions for the pgpass file.
-      /bin/sh -c "
-      cp -f /pgadmin4/pgpass /var/lib/pgadmin/;
-      chmod 600 /var/lib/pgadmin/pgpass;
-      chown pgadmin:pgadmin /var/lib/pgadmin/pgpass;
-      /entrypoint.sh
-      "
-    ports:
-      - "8888:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: danilosantana@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: danilo123
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
-    volumes:
-      - ./config/servers.json:/pgadmin4/servers.json
-      - ./config/pgpass:/pgadmin4/pgpass
-    networks:
-      - backend
-    depends_on:
-      - postgreSQL
-
 networks:
   backend:
     name: backend
     driver: bridge
-    external: true
   payment-processor:
     name: payment-processor
     driver: bridge

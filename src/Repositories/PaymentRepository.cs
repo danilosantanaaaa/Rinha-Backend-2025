@@ -1,3 +1,5 @@
+using System.Data;
+
 using Dapper;
 
 namespace Rinha.Api.Repositories;
@@ -23,7 +25,10 @@ public class PaymentRepository(DatabaseConnection connection)
 
     public async Task<SummaryResponse> GetSummaryAsync(DateTime? fromUtc, DateTime? toUtc)
     {
-        const string sql = @"
+        IDbConnection _context = connection.GetConnection();
+        try
+        {
+            const string sql = @"
                 SELECT gateway,
                     COUNT(*) AS TotalRequests,
                     SUM(amount) AS TotalAmount
@@ -32,24 +37,26 @@ public class PaymentRepository(DatabaseConnection connection)
                 AND (@toUtc IS NULL OR requested_at <= @toUtc)
                 GROUP BY gateway;";
 
-        var _context = connection.GetConnection();
 
-        var result = await _context.QueryAsync<Summary>(sql, new
+            var result = await _context.QueryAsync<Summary>(sql, new
+            {
+                fromUtc,
+                toUtc
+            });
+
+            var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
+                ?? new Summary(PaymentGateway.Default, 0, 0);
+
+            var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback)
+                ?? new Summary(PaymentGateway.Fallback, 0, 0);
+
+            return new SummaryResponse(
+                new SummaryItem(@default.TotalRequests, @default.TotalAmount),
+                new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
+        }
+        finally
         {
-            fromUtc,
-            toUtc
-        });
-
-        _context.Dispose();
-
-        var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
-            ?? new Summary(PaymentGateway.Default, 0, 0);
-
-        var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback)
-            ?? new Summary(PaymentGateway.Fallback, 0, 0);
-
-        return new SummaryResponse(
-            new SummaryItem(@default.TotalRequests, @default.TotalAmount),
-            new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
+            _context.Dispose();
+        }
     }
 }

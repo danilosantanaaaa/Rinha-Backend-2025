@@ -86,8 +86,6 @@ public class PaymentGatewayClient(
                 return JsonConvert.DeserializeObject<HealthResponse>(healthCached)!;
             }
 
-            PaymentService.Gateway = PaymentGateway.Default;
-
             health = await client.GetFromJsonAsync<HealthResponse>(
                 "payments/service-health",
                 cancellationToken: cancellationToken)

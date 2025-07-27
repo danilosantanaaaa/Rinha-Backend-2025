@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 using Rinha.Api.Repositories;
 using Rinha.Api.Services;
