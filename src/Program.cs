@@ -19,6 +19,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.AddHttpClient(nameof(PaymentGateway.Default), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorDefault"]!);
+    client.Timeout = TimeSpan.FromMilliseconds(Configuration.TimeoutInMilliseconds);
 });
 
 builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
@@ -26,15 +27,15 @@ builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorFallback"]!);
 });
 
-builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Configuration.PaymentQueue);
-builder.Services.AddKeyedSingleton<MessageQueue<PaymentRequest>>(Configuration.PaymentRetry);
+builder.Services.AddSingleton<HealthChecker>();
+builder.Services.AddSingleton<MessageQueue<PaymentRequest>>();
 
 builder.Services.AddSingleton<DatabaseConnection>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddSingleton<PaymentGatewayClient>();
 builder.Services.AddScoped<PaymentRepository>();
 
-builder.Services.AddSingleton<HealthSummary>();
+builder.Services.AddSingleton<CacheService>();
 builder.Services.AddHostedService<HealthBackgroundService>();
 builder.Services.AddHostedService<PaymentBackgroundService>();
 ThreadPool.SetMinThreads(64, 64);
@@ -52,7 +53,7 @@ app.UseExceptionHandler();
 
 app.MapPost("payments", async (
     [FromBody] PaymentRequest request,
-    [FromKeyedServices(Configuration.PaymentQueue)] MessageQueue<PaymentRequest> queue) =>
+    MessageQueue<PaymentRequest> queue) =>
 {
     await queue.EnqueueAsync(request);
 

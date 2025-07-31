@@ -483,6 +483,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-rinha-test
-
 pull
+
+/rinha-test/**result*
+/rinha-test/*.md
+
+/participantes

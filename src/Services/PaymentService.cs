@@ -4,17 +4,14 @@ namespace Rinha.Api.Services;
 
 public class PaymentService(
     PaymentRepository paymentRepository,
-    PaymentGatewayClient gatewayClient,
     ILogger<PaymentService> logger,
-    HealthSummary health,
-    [FromKeyedServices(Configuration.PaymentRetry)] MessageQueue<PaymentRequest> paymentRetryQueue)
+    HealthChecker circuitBreaker,
+    MessageQueue<PaymentRequest> paymentQueue)
 {
-    public static SemaphoreSlim Lock = new SemaphoreSlim(1);
     private readonly PaymentRepository _paymentRepository = paymentRepository;
-    private readonly PaymentGatewayClient _gatewayClient = gatewayClient;
     private readonly ILogger<PaymentService> _logger = logger;
-    private readonly HealthSummary _health = health;
-    private readonly MessageQueue<PaymentRequest> _paymentRetryQueue = paymentRetryQueue;
+    private readonly HealthChecker _circuitBreaker = circuitBreaker;
+    private readonly MessageQueue<PaymentRequest> _paymentQueue = paymentQueue;
 
     public async Task ProcessAsync(
         PaymentRequest request,
@@ -25,51 +22,22 @@ public class PaymentService(
             request.Amount,
             DateTime.UtcNow);
 
-        HttpResponseMessage? response = null;
-
-        await Lock.WaitAsync();
         try
         {
+            var isOk = await _circuitBreaker.ExecuteAsync(payment, cancellationToken);
 
-            var bestServer = _health.BestServer;
-            for (int attempt = 0; attempt < 3; attempt++)
+            if (isOk)
             {
-                if (_health.IsBothGatewaysUnhealthy())
-                {
-                    throw new InvalidOperationException("Both payment processors are failing.");
-                }
-
-                response = await SendPaymentToGateway(
-                    payment,
-                    bestServer,
-                    cancellationToken);
-
-                if (response?.IsSuccessStatusCode ?? false)
-                {
-                    _logger.LogInformation($"Payment {request.CorrelationId} processed successfully with strategy {bestServer}");
-                    await _paymentRepository.AddAsync(payment, bestServer);
-                    return;
-                }
-
-                bestServer = bestServer == PaymentGateway.Default
-                    ? PaymentGateway.Fallback
-                    : PaymentGateway.Default;
+                await _paymentRepository.AddAsync(payment, _circuitBreaker.Gateway);
+                return;
             }
 
-            if (response?.IsSuccessStatusCode ?? true)
-            {
-                throw new InvalidOperationException($"Payment {request.CorrelationId} failed after 3 attempts with strategy {bestServer}");
-            }
-
+            throw new Exception("Both services unavailable.");
         }
         catch (Exception ex)
         {
-            await _paymentRetryQueue.EnqueueAsync(request, cancellationToken);
-            _logger.LogError(ex.Message, ex);
-        }
-        finally
-        {
-            Lock.Release();
+            await _paymentQueue.EnqueueAsync(request, cancellationToken);
+            _logger.LogError($"Error: {ex.Message}", ex);
         }
     }
 
@@ -84,28 +52,4 @@ public class PaymentService(
             throw;
         }
     }
-
-    private async Task<HttpResponseMessage?> SendPaymentToGateway(
-        Payment payment,
-        PaymentGateway gateway,
-        CancellationToken cancellationToken)
-    {
-        HttpResponseMessage? response = null;
-
-        // Criando pipeline
-        try
-        {
-            response = await _gatewayClient.PaymentAsync(
-                    payment,
-                    gateway,
-                    cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex.Message, ex);
-        }
-
-        return response;
-    }
-
 }

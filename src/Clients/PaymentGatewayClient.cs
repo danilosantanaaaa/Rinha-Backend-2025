@@ -8,11 +8,11 @@ namespace Rinha.Api.Clients;
 
 public class PaymentGatewayClient(
     IHttpClientFactory httpClientFactory,
-    IDistributedCache cache,
+    CacheService cache,
     ILogger<PaymentGatewayClient> logger)
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly IDistributedCache _cache = cache;
+    private readonly CacheService _cache = cache;
     private readonly ILogger<PaymentGatewayClient> _logger = logger;
 
     public async Task<HttpResponseMessage> PaymentAsync(
@@ -21,14 +21,16 @@ public class PaymentGatewayClient(
         CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
-        client.Timeout = TimeSpan.FromMilliseconds(1000);
         try
         {
             var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
 
-            if (!result.IsSuccessStatusCode)
+            if (result.IsSuccessStatusCode)
             {
-                throw new HttpRequestException($"Failed to process payment: {result.ReasonPhrase}");
+                await _cache.SetAsync(
+                    $"payment:last:{gateway}",
+                    payment,
+                    cancellationToken: cancellationToken);
             }
 
             return result;
@@ -75,15 +77,13 @@ public class PaymentGatewayClient(
 
         try
         {
-            var healthCached = await _cache.GetStringAsync(
+            HealthResponse? health = await _cache.GetAsync<HealthResponse>(
                 gateway.ToString(),
-                token: cancellationToken);
+                cancellationToken: cancellationToken);
 
-            HealthResponse health;
-
-            if (!string.IsNullOrEmpty(healthCached))
+            if (health is not null)
             {
-                return JsonConvert.DeserializeObject<HealthResponse>(healthCached)!;
+                return health;
             }
 
             health = await client.GetFromJsonAsync<HealthResponse>(
@@ -91,7 +91,7 @@ public class PaymentGatewayClient(
                 cancellationToken: cancellationToken)
             ?? throw new HttpRequestException("Failed to get health response from payment processor");
 
-            await _cache.SetStringAsync(
+            await _cache.SetAsync(
                 gateway.ToString(),
                 JsonConvert.SerializeObject(health),
                 new DistributedCacheEntryOptions

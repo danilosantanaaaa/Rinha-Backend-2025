@@ -28,21 +28,30 @@ public class PaymentRepository(DatabaseConnection connection)
         IDbConnection _context = connection.GetConnection();
         try
         {
+
+            var parameters = new DynamicParameters();
+
+            parameters.Add(
+                name: "fromUtc",
+                dbType: DbType.DateTimeOffset,
+                value: fromUtc.HasValue ? DateTime.SpecifyKind(fromUtc.Value, DateTimeKind.Utc) : DBNull.Value);
+
+            parameters.Add(
+                name: "toUtc",
+                dbType: DbType.DateTimeOffset,
+                value: toUtc.HasValue ? DateTime.SpecifyKind(toUtc.Value, DateTimeKind.Utc) : DBNull.Value);
+
             const string sql = @"
                 SELECT gateway,
                     COUNT(*) AS TotalRequests,
                     SUM(amount) AS TotalAmount
                 FROM payments
-                WHERE (@fromUtc IS NULL OR requested_at >= @fromUtc)
-                AND (@toUtc IS NULL OR requested_at <= @toUtc)
+                WHERE requested_at BETWEEN @fromUtc AND @toUtc
+                    OR @fromUtc is NULL
+                    OR @toUtc is NULL
                 GROUP BY gateway;";
 
-
-            var result = await _context.QueryAsync<Summary>(sql, new
-            {
-                fromUtc,
-                toUtc
-            });
+            var result = await _context.QueryAsync<Summary>(sql, parameters);
 
             var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
                 ?? new Summary(PaymentGateway.Default, 0, 0);

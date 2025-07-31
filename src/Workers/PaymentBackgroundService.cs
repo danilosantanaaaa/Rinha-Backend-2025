@@ -6,16 +6,12 @@ public class PaymentBackgroundService : BackgroundService
 {
     private readonly PaymentService _paymentService;
     private readonly MessageQueue<PaymentRequest> _paymentQueue;
-    private readonly MessageQueue<PaymentRequest> _paymentRetryQueue;
     private readonly ILogger<PaymentBackgroundService> _logger;
-    private readonly HealthSummary _health;
 
     public PaymentBackgroundService(
-        [FromKeyedServices(Configuration.PaymentQueue)] MessageQueue<PaymentRequest> paymentQueue,
-        [FromKeyedServices(Configuration.PaymentRetry)] MessageQueue<PaymentRequest> paymentRetryQueue,
+        MessageQueue<PaymentRequest> paymentQueue,
         IServiceScopeFactory scopeFactory,
-        ILogger<PaymentBackgroundService> logger,
-        HealthSummary health)
+        ILogger<PaymentBackgroundService> logger)
     {
         _paymentService = scopeFactory
             .CreateScope()
@@ -23,9 +19,7 @@ public class PaymentBackgroundService : BackgroundService
             .GetRequiredService<PaymentService>();
 
         _paymentQueue = paymentQueue;
-        _paymentRetryQueue = paymentRetryQueue;
         _logger = logger;
-        _health = health;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -33,15 +27,9 @@ public class PaymentBackgroundService : BackgroundService
         var tasks = new List<Task>();
 
         // Start multiple payment processing tasks to handle payments concurrently
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < 30; i++)
         {
             tasks.Add(ProcessPaymentAsync(i, stoppingToken));
-        }
-
-        // Start multiple retry tasks to handle retries concurrently
-        for (var i = 20; i < 30; i++)
-        {
-            tasks.Add(RetryPaymentAsync(i, stoppingToken));
         }
 
         await Task.WhenAll(tasks);
@@ -65,23 +53,4 @@ public class PaymentBackgroundService : BackgroundService
             }
         }
     }
-
-    private async Task RetryPaymentAsync(int workId, CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Retry Worker Id {WorkerId} started processing payments", workId);
-        while (await _paymentRetryQueue.WaitToReadAsync(stoppingToken))
-        {
-            try
-            {
-                var request = await _paymentRetryQueue.DequeueAsync(stoppingToken);
-                await _paymentService.ProcessAsync(request, stoppingToken);
-
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.Message, ex);
-            }
-        }
-    }
-
 }
