@@ -4,17 +4,14 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<!-- <PublishAot>true</PublishAot>
-				<PublishSingleFile>true</PublishSingleFile>
-				<SelfContained>true</SelfContained> -->
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Dapper" Version="2.1.66"/>
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.6"/>
 		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.7"/>
-		<PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
 		<PackageReference Include="Npgsql" Version="9.0.3"/>
+		<PackageReference Include="Npgsql.DependencyInjection" Version="9.0.3"/>
 	</ItemGroup>
 
 </Project>

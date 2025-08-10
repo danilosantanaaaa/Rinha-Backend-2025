@@ -1,12 +1,12 @@
-using Microsoft.Extensions.Caching.Distributed;
+using System.Net;
 
-using Newtonsoft.Json;
+using Microsoft.Extensions.Caching.Distributed;
 
 using Rinha.Api.Services;
 
 namespace Rinha.Api.Clients;
 
-public class PaymentGatewayClient(
+public sealed class PaymentGatewayClient(
     IHttpClientFactory httpClientFactory,
     CacheService cache,
     ILogger<PaymentGatewayClient> logger)
@@ -21,6 +21,7 @@ public class PaymentGatewayClient(
         CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
+
         try
         {
             var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
@@ -34,6 +35,13 @@ public class PaymentGatewayClient(
             }
 
             return result;
+        }
+        catch (Exception)
+        {
+            return new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.InternalServerError
+            };
         }
         finally
         {
@@ -69,43 +77,26 @@ public class PaymentGatewayClient(
         }
     }
 
-    public async Task<HealthResponse> GetHealthAsync(
-       PaymentGateway gateway = PaymentGateway.Default,
-       CancellationToken cancellationToken = default)
+    public async Task<HttpResponseMessage> GetHealthAsync(
+        Payment payment,
+        PaymentGateway gateway = PaymentGateway.Default,
+        CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
+        client.Timeout = TimeSpan.FromMilliseconds(Configuration.TimeoutInMilliseconds);
 
         try
         {
-            HealthResponse? health = await _cache.GetAsync<HealthResponse>(
-                gateway.ToString(),
-                cancellationToken: cancellationToken);
+            var result = await client.PostAsJsonAsync("payments", payment, cancellationToken);
 
-            if (health is not null)
-            {
-                return health;
-            }
-
-            health = await client.GetFromJsonAsync<HealthResponse>(
-                "payments/service-health",
-                cancellationToken: cancellationToken)
-            ?? throw new HttpRequestException("Failed to get health response from payment processor");
-
-            await _cache.SetAsync(
-                gateway.ToString(),
-                JsonConvert.SerializeObject(health),
-                new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMilliseconds(5000)
-                },
-                cancellationToken);
-
-            return health;
+            return result;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger.LogError($"Failed to get health from '{gateway}' payment processor.", ex);
-            return new HealthResponse(true, 0);
+            return new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.InternalServerError
+            };
         }
         finally
         {

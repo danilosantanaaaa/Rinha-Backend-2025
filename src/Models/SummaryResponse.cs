@@ -1,9 +1,9 @@
 namespace Rinha.Api.Models;
 
-public record SummaryItem(
+public sealed record SummaryItem(
     int TotalRequests,
     decimal TotalAmount);
 
-public record SummaryResponse(
+public sealed record SummaryResponse(
     SummaryItem Default,
     SummaryItem Fallback);

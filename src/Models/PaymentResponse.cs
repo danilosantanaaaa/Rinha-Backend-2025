@@ -1,3 +1,3 @@
 namespace Rinha.Api.Models;
 
-public record PaymentResponse(string Message);
+public sealed record PaymentResponse(string Message);

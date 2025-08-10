@@ -1,6 +1,6 @@
 namespace Rinha.Api.Models;
 
-public record Summary(
+public sealed record Summary(
     PaymentGateway gateway,
     int TotalRequests,
     decimal TotalAmount)

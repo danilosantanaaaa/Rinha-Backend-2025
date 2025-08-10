@@ -4,44 +4,42 @@ using Dapper;
 
 namespace Rinha.Api.Repositories;
 
-public class PaymentRepository(DatabaseConnection connection)
+public sealed class PaymentRepository(NpgsqlDataSource dbSource)
 {
     public async Task AddAsync(Payment payment, PaymentGateway gateway)
     {
+        using var connection = await dbSource.OpenConnectionAsync();
+
         var sql = @"INSERT INTO payments (correlationId, amount, requested_at, gateway)
                   VALUES(@CorrelationId, @Amount, @Requested_At, @Gateway);";
 
-        var _context = connection.GetConnection();
-        await _context.ExecuteAsync(sql, new
+        await connection.ExecuteAsync(sql, new
         {
             payment.CorrelationId,
             payment.Amount,
             Requested_At = payment.RequestedAt,
             Gateway = gateway
         });
-
-        _context.Dispose();
     }
 
-    public async Task<SummaryResponse> GetSummaryAsync(DateTime? fromUtc, DateTime? toUtc)
+    public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset? fromUtc, DateTimeOffset? toUtc)
     {
-        IDbConnection _context = connection.GetConnection();
-        try
-        {
+        using var connection = await dbSource.OpenConnectionAsync();
 
-            var parameters = new DynamicParameters();
+        // var parameters = new DynamicParameters();
 
-            parameters.Add(
-                name: "fromUtc",
-                dbType: DbType.DateTimeOffset,
-                value: fromUtc.HasValue ? DateTime.SpecifyKind(fromUtc.Value, DateTimeKind.Utc) : DBNull.Value);
+        // parameters.Add(
+        //     name: "fromUtc",
+        //     dbType: DbType.DateTimeOffset,
+        //     value: fromUtc.HasValue ? DateTime.SpecifyKind(fromUtc.Value, DateTimeKind.Utc) : DBNull.Value);
 
-            parameters.Add(
-                name: "toUtc",
-                dbType: DbType.DateTimeOffset,
-                value: toUtc.HasValue ? DateTime.SpecifyKind(toUtc.Value, DateTimeKind.Utc) : DBNull.Value);
+        // parameters.Add(
+        //     name: "toUtc",
+        //     dbType: DbType.DateTimeOffset,
+        //     value: toUtc.HasValue ? DateTime.SpecifyKind(toUtc.Value, DateTimeKind.Utc) : DBNull.Value);
 
-            const string sql = @"
+
+        const string sql = @"
                 SELECT gateway,
                     COUNT(*) AS TotalRequests,
                     SUM(amount) AS TotalAmount
@@ -51,21 +49,21 @@ public class PaymentRepository(DatabaseConnection connection)
                     OR @toUtc is NULL
                 GROUP BY gateway;";
 
-            var result = await _context.QueryAsync<Summary>(sql, parameters);
-
-            var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
-                ?? new Summary(PaymentGateway.Default, 0, 0);
-
-            var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback)
-                ?? new Summary(PaymentGateway.Fallback, 0, 0);
-
-            return new SummaryResponse(
-                new SummaryItem(@default.TotalRequests, @default.TotalAmount),
-                new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
-        }
-        finally
+        var result = await connection.QueryAsync<Summary>(sql, new
         {
-            _context.Dispose();
-        }
+            fromUtc,
+            toUtc
+        });
+
+        var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
+            ?? new Summary(PaymentGateway.Default, 0, 0);
+
+        var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback)
+            ?? new Summary(PaymentGateway.Fallback, 0, 0);
+
+        return new SummaryResponse(
+            new SummaryItem(@default.TotalRequests, @default.TotalAmount),
+            new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
+
     }
 }

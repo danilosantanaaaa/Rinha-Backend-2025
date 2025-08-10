@@ -1,4 +1,4 @@
-fe# Script básico para automatizar testes
+# Script básico para automatizar testes
 
 # Derrubar todos os serviços
 docker compose -f .\payment-processor\docker-compose.yml  down -v ## Derruba o processor

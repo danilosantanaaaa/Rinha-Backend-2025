@@ -1,10 +1,11 @@
+using System.Text.Json;
+
 using Microsoft.Extensions.Caching.Distributed;
 
-using Newtonsoft.Json;
 
 namespace Rinha.Api.Services;
 
-public class CacheService(IDistributedCache cache)
+public sealed class CacheService(IDistributedCache cache)
 {
     private readonly IDistributedCache _cache = cache;
 
@@ -17,7 +18,7 @@ public class CacheService(IDistributedCache cache)
     {
         await _cache.SetStringAsync(
                key.ToString(),
-               JsonConvert.SerializeObject(item),
+                JsonSerializer.Serialize(item),
                options ?? new DistributedCacheEntryOptions(),
                cancellationToken);
     }
@@ -34,6 +35,6 @@ public class CacheService(IDistributedCache cache)
             return null;
         }
 
-        return JsonConvert.DeserializeObject<TItem?>(result!);
+        return JsonSerializer.Deserialize<TItem>(result);
     }
 }

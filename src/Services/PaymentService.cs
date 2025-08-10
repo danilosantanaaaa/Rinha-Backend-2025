@@ -2,15 +2,17 @@ using Rinha.Api.Repositories;
 
 namespace Rinha.Api.Services;
 
-public class PaymentService(
+public sealed class PaymentService(
     PaymentRepository paymentRepository,
+    PaymentGatewayClient paymentClient,
     ILogger<PaymentService> logger,
     HealthChecker circuitBreaker,
     MessageQueue<PaymentRequest> paymentQueue)
 {
     private readonly PaymentRepository _paymentRepository = paymentRepository;
+    private readonly PaymentGatewayClient _paymentClient = paymentClient;
     private readonly ILogger<PaymentService> _logger = logger;
-    private readonly HealthChecker _circuitBreaker = circuitBreaker;
+    private readonly HealthChecker _healthChecker = circuitBreaker;
     private readonly MessageQueue<PaymentRequest> _paymentQueue = paymentQueue;
 
     public async Task ProcessAsync(
@@ -24,13 +26,33 @@ public class PaymentService(
 
         try
         {
-            var isOk = await _circuitBreaker.ExecuteAsync(payment, cancellationToken);
-
-            if (isOk)
+            // Default
+            if (_healthChecker.IsDefaultHealth)
             {
-                await _paymentRepository.AddAsync(payment, _circuitBreaker.Gateway);
-                return;
+                var result = await _paymentClient.PaymentAsync(payment, PaymentGateway.Default);
+
+                if (result.IsSuccessStatusCode)
+                {
+                    await _paymentRepository.AddAsync(payment, PaymentGateway.Default);
+                    return;
+                }
             }
+
+            _healthChecker.SetUpdateHealth(PaymentGateway.Default, false, cancellationToken);
+
+            // Fallback
+            if (_healthChecker.IsFallbackHealth)
+            {
+                var result = await _paymentClient.PaymentAsync(payment, PaymentGateway.Fallback);
+
+                if (result.IsSuccessStatusCode)
+                {
+                    await _paymentRepository.AddAsync(payment, PaymentGateway.Fallback);
+                    return;
+                }
+            }
+
+            _healthChecker.SetUpdateHealth(PaymentGateway.Fallback, false, cancellationToken);
 
             throw new Exception("Both services unavailable.");
         }
@@ -41,7 +63,7 @@ public class PaymentService(
         }
     }
 
-    public async Task<SummaryResponse> GetSummaryAsync(DateTime? fromUtc, DateTime? toUtc)
+    public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset? fromUtc, DateTimeOffset? toUtc)
     {
         try
         {

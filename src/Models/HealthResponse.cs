@@ -1,6 +1,6 @@
 namespace Rinha.Api.Models;
 
-public record HealthResponse(
+public sealed record HealthResponse(
     bool Failing,
     int MinResponseTime)
 {

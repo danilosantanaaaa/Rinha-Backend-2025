@@ -14,12 +14,17 @@ builder.Services.AddProblemDetails();
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration.GetConnectionString("Redis");
+
+    options.ConfigurationOptions = new StackExchange.Redis.ConfigurationOptions()
+    {
+        AbortOnConnectFail = true,
+        EndPoints = { options.Configuration! }
+    };
 });
 
 builder.Services.AddHttpClient(nameof(PaymentGateway.Default), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorDefault"]!);
-    client.Timeout = TimeSpan.FromMilliseconds(Configuration.TimeoutInMilliseconds);
 });
 
 builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
@@ -30,7 +35,11 @@ builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
 builder.Services.AddSingleton<HealthChecker>();
 builder.Services.AddSingleton<MessageQueue<PaymentRequest>>();
 
-builder.Services.AddSingleton<DatabaseConnection>();
+var connectionStrings = builder.Configuration.GetConnectionString("PostgreSQL")
+    ?? throw new InvalidOperationException("Database connection string is not configured.");
+
+builder.Services.AddNpgsqlDataSource(connectionStrings);
+
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddSingleton<PaymentGatewayClient>();
 builder.Services.AddScoped<PaymentRepository>();
@@ -62,8 +71,8 @@ app.MapPost("payments", async (
 
 app.MapGet("payments-summary", async (
     [FromServices] PaymentService paymentService,
-    [FromQuery] DateTime? from,
-    [FromQuery] DateTime? to) =>
+    [FromQuery] DateTimeOffset? from,
+    [FromQuery] DateTimeOffset? to) =>
 {
     var result = await paymentService.GetSummaryAsync(from, to);
     return Results.Ok(result);

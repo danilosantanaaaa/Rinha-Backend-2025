@@ -1,5 +1,5 @@
 namespace Rinha.Api.Models;
 
-public record PaymentRequest(
+public sealed record PaymentRequest(
     Guid CorrelationId,
     decimal Amount);
