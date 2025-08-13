@@ -1,36 +1,51 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+
+using Dapper;
+
+using RedLockNet;
+using RedLockNet.SERedis;
+using RedLockNet.SERedis.Configuration;
 
 using Rinha.Api.Repositories;
 using Rinha.Api.Services;
 using Rinha.Api.Workers;
 
-var builder = WebApplication.CreateBuilder(args);
+using StackExchange.Redis;
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+[module: DapperAot]
+
+var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.AddProblemDetails();
 
-builder.Services.AddStackExchangeRedisCache(options =>
+builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.Configuration = builder.Configuration.GetConnectionString("Redis");
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+});
 
-    options.ConfigurationOptions = new StackExchange.Redis.ConfigurationOptions()
-    {
-        AbortOnConnectFail = true,
-        EndPoints = { options.Configuration! }
-    };
+var redisConnection = builder.Configuration.GetConnectionString("RedisCache")
+    ?? throw new InvalidOperationException("Connection Strings for RedisCache invalid or nullable.");
+
+var redis = ConnectionMultiplexer.Connect(redisConnection);
+builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
+builder.Services.AddSingleton<CacheService>();
+
+builder.Services.AddSingleton<IDistributedLockFactory>(_ =>
+{
+    var multiplexer = new List<RedLockMultiplexer> { redis };
+    return RedLockFactory.Create(multiplexer);
 });
 
 builder.Services.AddHttpClient(nameof(PaymentGateway.Default), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorDefault"]!);
-});
+}).ConfigurePrimaryHttpMessageHandler(Configuration.GetSocketHandler());
 
 builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["PaymentProcessorFallback"]!);
-});
+}).ConfigurePrimaryHttpMessageHandler(Configuration.GetSocketHandler());
 
 builder.Services.AddSingleton<HealthChecker>();
 builder.Services.AddSingleton<MessageQueue<PaymentRequest>>();
@@ -41,28 +56,20 @@ var connectionStrings = builder.Configuration.GetConnectionString("PostgreSQL")
 builder.Services.AddNpgsqlDataSource(connectionStrings);
 
 builder.Services.AddScoped<PaymentService>();
-builder.Services.AddSingleton<PaymentGatewayClient>();
+builder.Services.AddSingleton<PaymentClient>();
 builder.Services.AddScoped<PaymentRepository>();
 
-builder.Services.AddSingleton<CacheService>();
 builder.Services.AddHostedService<HealthBackgroundService>();
 builder.Services.AddHostedService<PaymentBackgroundService>();
 ThreadPool.SetMinThreads(64, 64);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-
-app.UseHttpsRedirection();
 app.UseExceptionHandler();
 
 app.MapPost("payments", async (
-    [FromBody] PaymentRequest request,
-    MessageQueue<PaymentRequest> queue) =>
+    MessageQueue<PaymentRequest> queue,
+    PaymentRequest request) =>
 {
     await queue.EnqueueAsync(request);
 
@@ -70,9 +77,9 @@ app.MapPost("payments", async (
 });
 
 app.MapGet("payments-summary", async (
-    [FromServices] PaymentService paymentService,
-    [FromQuery] DateTimeOffset? from,
-    [FromQuery] DateTimeOffset? to) =>
+    PaymentService paymentService,
+    DateTimeOffset? from,
+    DateTimeOffset? to) =>
 {
     var result = await paymentService.GetSummaryAsync(from, to);
     return Results.Ok(result);

@@ -1,1 +1,14 @@
-GET http://localhost:5056/healthchech
+@host=http://localhost:9999
+
+
+### Send cache
+POST {{host}}/cache
+Content-Type: application/json
+
+{
+    "CorrelationId": "999790a4-4ed0-4d0a-97eb-5665096e9071",
+    "Amount": 300
+}
+
+### Get cache
+GET {{host}}/cache

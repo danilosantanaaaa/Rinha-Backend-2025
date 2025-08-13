@@ -1,5 +1,5 @@
-POST http://localhost:5056/payments
-#POST http://localhost:9999/payments
+#POST http://localhost:5056/payments
+POST http://localhost:9999/payments
 Content-Type: application/json
 
 {

@@ -1,5 +1,3 @@
-using System.Data;
-
 using Dapper;
 
 namespace Rinha.Api.Repositories;
@@ -10,34 +8,21 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
     {
         using var connection = await dbSource.OpenConnectionAsync();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("CorrelationId", payment.CorrelationId);
+        parameters.Add("Amount", payment.Amount);
+        parameters.Add("Requested_At", payment.RequestedAt);
+        parameters.Add("Gateway", gateway.ToString());
+
         var sql = @"INSERT INTO payments (correlationId, amount, requested_at, gateway)
                   VALUES(@CorrelationId, @Amount, @Requested_At, @Gateway);";
 
-        await connection.ExecuteAsync(sql, new
-        {
-            payment.CorrelationId,
-            payment.Amount,
-            Requested_At = payment.RequestedAt,
-            Gateway = gateway
-        });
+        await connection.ExecuteAsync(sql, parameters);
     }
 
     public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset? fromUtc, DateTimeOffset? toUtc)
     {
         using var connection = await dbSource.OpenConnectionAsync();
-
-        // var parameters = new DynamicParameters();
-
-        // parameters.Add(
-        //     name: "fromUtc",
-        //     dbType: DbType.DateTimeOffset,
-        //     value: fromUtc.HasValue ? DateTime.SpecifyKind(fromUtc.Value, DateTimeKind.Utc) : DBNull.Value);
-
-        // parameters.Add(
-        //     name: "toUtc",
-        //     dbType: DbType.DateTimeOffset,
-        //     value: toUtc.HasValue ? DateTime.SpecifyKind(toUtc.Value, DateTimeKind.Utc) : DBNull.Value);
-
 
         const string sql = @"
                 SELECT gateway,
@@ -55,11 +40,11 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
             toUtc
         });
 
-        var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default)
-            ?? new Summary(PaymentGateway.Default, 0, 0);
+        var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default.ToString())
+            ?? new Summary(PaymentGateway.Default.ToString(), 0, 0);
 
-        var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback)
-            ?? new Summary(PaymentGateway.Fallback, 0, 0);
+        var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback.ToString())
+            ?? new Summary(PaymentGateway.Fallback.ToString(), 0, 0);
 
         return new SummaryResponse(
             new SummaryItem(@default.TotalRequests, @default.TotalAmount),

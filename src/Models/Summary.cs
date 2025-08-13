@@ -1,9 +1,9 @@
 namespace Rinha.Api.Models;
 
 public sealed record Summary(
-    PaymentGateway gateway,
+    string gateway,
     int TotalRequests,
     decimal TotalAmount)
 {
-    public Summary() : this(default, default, default) { }
+    public Summary() : this(string.Empty, default, default) { }
 }

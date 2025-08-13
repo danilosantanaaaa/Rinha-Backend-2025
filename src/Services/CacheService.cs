@@ -1,40 +1,45 @@
 using System.Text.Json;
 
-using Microsoft.Extensions.Caching.Distributed;
-
+using StackExchange.Redis;
 
 namespace Rinha.Api.Services;
 
-public sealed class CacheService(IDistributedCache cache)
+public sealed class CacheService(IConnectionMultiplexer redis)
 {
-    private readonly IDistributedCache _cache = cache;
+    private readonly IConnectionMultiplexer _redis = redis;
 
-    public async Task SetAsync<TItem>(
+    public async Task SetAsync<TValue>(
         string key,
-        TItem item,
-        DistributedCacheEntryOptions? options = null,
-        CancellationToken cancellationToken = default)
-    where TItem : class
+        TValue value,
+        TimeSpan? expiry = null
+    )
+    where TValue : class
     {
-        await _cache.SetStringAsync(
-               key.ToString(),
-                JsonSerializer.Serialize(item),
-               options ?? new DistributedCacheEntryOptions(),
-               cancellationToken);
+        var db = _redis.GetDatabase();
+
+        JsonSerializerOptions options = new JsonSerializerOptions
+        {
+            TypeInfoResolver = AppJsonSerializerContext.Default
+        };
+
+        var json = JsonSerializer.Serialize(value, options);
+
+        await db.StringSetAsync(key, json, expiry);
     }
 
-    public async Task<TItem?> GetAsync<TItem>(string key, CancellationToken cancellationToken = default)
-        where TItem : class
+    public async Task<TValue?> GetAsync<TValue>(string key)
+        where TValue : class
     {
-        string? result = await _cache.GetStringAsync(
-            key,
-            token: cancellationToken);
+        var db = _redis.GetDatabase();
+        var json = await db.StringGetAsync(key);
 
-        if (string.IsNullOrEmpty(result))
+        JsonSerializerOptions options = new JsonSerializerOptions
         {
-            return null;
-        }
+            TypeInfoResolver = AppJsonSerializerContext.Default
+        };
 
-        return JsonSerializer.Deserialize<TItem>(result);
+        return json.HasValue
+            ? JsonSerializer.Deserialize<TValue>(json, options)
+            : default;
     }
 }

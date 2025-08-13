@@ -1,5 +1,3 @@
-using System.Net;
-
 using Rinha.Api.Services;
 
 namespace Rinha.Api.Workers;

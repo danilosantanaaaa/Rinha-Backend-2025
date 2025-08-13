@@ -22,8 +22,8 @@ services:
 
   api-1: &api-service
     container_name: api-1
-    build: .
-    # image: danilosantanaaa/rinha:2025.3
+    #build: .
+    image: danilosantanaaa/rinha:2025.6
     expose:
       - "8080"
     ports:
@@ -32,8 +32,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__Redis=redis:6379
       - ConnectionStrings__PostgreSQL=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=70;Maximum Pool Size=100;Connection Pruning Interval=3
+      - ConnectionStrings__RedisCache=redis:6379,abortConnect=false,connectTimeout=30000,responseTimeout=30000
       - PaymentProcessorDefault=http://payment-processor-default:8080
       - PaymentProcessorFallback=http://payment-processor-fallback:8080
     depends_on:
@@ -47,15 +47,15 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.4"
-          memory: "90MB"
+          cpus: "0.35"
+          memory: "95MB"
   api-2:
     <<: *api-service
     container_name: api-2
     ports:
       - "3002:8080"
     hostname: api-2
-    
+
   redis:
     container_name: cache
     hostname: redis
@@ -68,8 +68,9 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.1"
+          cpus: "0.2"
           memory: "20MB"
+
 
   postgreSQL:
     container_name: database
@@ -103,7 +104,7 @@ services:
       resources:
         limits:
           cpus: "0.4"
-          memory: "110MB"
+          memory: "100MB"
 
 networks:
   backend:

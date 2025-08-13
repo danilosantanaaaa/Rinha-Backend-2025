@@ -4,15 +4,15 @@ namespace Rinha.Api.Services;
 
 public sealed class PaymentService(
     PaymentRepository paymentRepository,
-    PaymentGatewayClient paymentClient,
+    PaymentClient paymentClient,
     ILogger<PaymentService> logger,
-    HealthChecker circuitBreaker,
+    HealthChecker healthBreaker,
     MessageQueue<PaymentRequest> paymentQueue)
 {
     private readonly PaymentRepository _paymentRepository = paymentRepository;
-    private readonly PaymentGatewayClient _paymentClient = paymentClient;
+    private readonly PaymentClient _paymentClient = paymentClient;
     private readonly ILogger<PaymentService> _logger = logger;
-    private readonly HealthChecker _healthChecker = circuitBreaker;
+    private readonly HealthChecker _healthChecker = healthBreaker;
     private readonly MessageQueue<PaymentRequest> _paymentQueue = paymentQueue;
 
     public async Task ProcessAsync(
@@ -27,7 +27,7 @@ public sealed class PaymentService(
         try
         {
             // Default
-            if (_healthChecker.IsDefaultHealth)
+            if (_healthChecker.IsDefaultBest())
             {
                 var result = await _paymentClient.PaymentAsync(payment, PaymentGateway.Default);
 
@@ -38,10 +38,10 @@ public sealed class PaymentService(
                 }
             }
 
-            _healthChecker.SetUpdateHealth(PaymentGateway.Default, false, cancellationToken);
+            _healthChecker.SetUpdateHealthy(PaymentGateway.Default, false);
 
             // Fallback
-            if (_healthChecker.IsFallbackHealth)
+            if (_healthChecker.IsFallbackBest())
             {
                 var result = await _paymentClient.PaymentAsync(payment, PaymentGateway.Fallback);
 
@@ -52,7 +52,7 @@ public sealed class PaymentService(
                 }
             }
 
-            _healthChecker.SetUpdateHealth(PaymentGateway.Fallback, false, cancellationToken);
+            _healthChecker.SetUpdateHealthy(PaymentGateway.Fallback, false);
 
             throw new Exception("Both services unavailable.");
         }

@@ -27,7 +27,7 @@ public class PaymentBackgroundService : BackgroundService
         var tasks = new List<Task>();
 
         // Start multiple payment processing tasks to handle payments concurrently
-        for (var i = 0; i < 30; i++)
+        for (var i = 0; i < Configuration.WorkerParallel; i++)
         {
             tasks.Add(ProcessPaymentAsync(i, stoppingToken));
         }

@@ -11,7 +11,8 @@ public sealed class MessageQueue<TModel> where TModel : class
         Queue = Channel.CreateUnbounded<TModel>(new UnboundedChannelOptions
         {
             SingleReader = false,
-            SingleWriter = false
+            SingleWriter = false,
+            AllowSynchronousContinuations = false
         });
     }
 
