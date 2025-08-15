@@ -7,7 +7,23 @@ using Rinha.Api.Workers;
 
 [module: DapperAot]
 
+var serverSocketName = Environment.GetEnvironmentVariable("ServerName")
+    ?? throw new ArgumentNullException("Server Name is null");
+
+var socketPath = $"/run/{serverSocketName}.sock";
+
+if (File.Exists(socketPath))
+{
+    File.Delete(socketPath);
+}
+
 var builder = WebApplication.CreateSlimBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxConcurrentConnections = int.MaxValue;
+    options.ListenUnixSocket(socketPath);
+});
 
 builder.Services.AddProblemDetails();
 

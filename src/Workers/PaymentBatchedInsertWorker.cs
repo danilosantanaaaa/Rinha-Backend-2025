@@ -20,7 +20,7 @@ public sealed class PaymentBatchedInsertWorker(
             IEnumerable<Payment> payments = [];
             try
             {
-                if (_processedQueue.Count >= Configuration.TasksInParallel)
+                if (_processedQueue.Count >= Configuration.MaxDegreeOfParallels)
                 {
                     payments = await _processedQueue.ReadAllAsync(stoppingToken);
                     await _paymentRepository.AddRangeAsync(payments);
@@ -37,7 +37,7 @@ public sealed class PaymentBatchedInsertWorker(
                 }
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(1), stoppingToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(5), stoppingToken);
         }
     }
 }

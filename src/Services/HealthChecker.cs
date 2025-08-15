@@ -14,21 +14,9 @@ public sealed class HealthChecker(
 
     public async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        while (true)
-        {
-            try
-            {
-                await Task.WhenAll(
-                    UpdateHealthyAsync(PaymentGateway.Default, cancellationToken),
-                    UpdateHealthyAsync(PaymentGateway.Fallback, cancellationToken));
-            }
-            catch (Exception e)
-            {
-                logger.LogError(e.Message, e);
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(5), cancellationToken);
-        }
+        await Task.WhenAll(
+            UpdateHealthyAsync(PaymentGateway.Default, cancellationToken),
+            UpdateHealthyAsync(PaymentGateway.Fallback, cancellationToken));
     }
 
     public void SetUpdateHealthy(PaymentGateway gateway, bool failing)
