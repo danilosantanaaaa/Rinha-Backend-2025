@@ -1,27 +1,32 @@
-using Dapper;
+using Rinha.Api.Models.Payments;
+using Rinha.Api.Models.Summaries;
 
 namespace Rinha.Api.Repositories;
 
 public sealed class PaymentRepository(NpgsqlDataSource dbSource)
 {
-    public async Task AddAsync(Payment payment, PaymentGateway gateway)
+    public async Task<int> AddRangeAsync(IEnumerable<Payment> payments)
     {
         using var connection = await dbSource.OpenConnectionAsync();
-
-        var parameters = new DynamicParameters();
-        parameters.Add("CorrelationId", payment.CorrelationId);
-        parameters.Add("Amount", payment.Amount);
-        parameters.Add("Requested_At", payment.RequestedAt);
-        parameters.Add("Gateway", gateway.ToString());
 
         var sql = @"INSERT INTO payments (correlationId, amount, requested_at, gateway)
                   VALUES(@CorrelationId, @Amount, @Requested_At, @Gateway);";
 
-        await connection.ExecuteAsync(sql, parameters);
+        return await connection.ExecuteAsync(sql, payments.Select(r =>
+        {
+            return new
+            {
+                r.CorrelationId,
+                r.Amount,
+                Requested_At = r.RequestedAt,
+                Gateway = r.Gateway.ToString(),
+            };
+        }));
     }
 
     public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset? fromUtc, DateTimeOffset? toUtc)
     {
+
         using var connection = await dbSource.OpenConnectionAsync();
 
         const string sql = @"
@@ -49,6 +54,5 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
         return new SummaryResponse(
             new SummaryItem(@default.TotalRequests, @default.TotalAmount),
             new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
-
     }
 }

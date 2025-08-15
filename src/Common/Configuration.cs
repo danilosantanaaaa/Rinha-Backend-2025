@@ -5,8 +5,8 @@ namespace Rinha.Api.Common;
 public static class Configuration
 {
     public const int TimeoutInMilliseconds = 1000;
-    public const int WorkerParallel = 20;
-    public const int CacheTimeExpiryInSeconds = 5;
+    public const int TasksInParallel = 30;
+    public const int CacheLockedInSeconds = 5;
 
     public static Func<HttpMessageHandler> GetSocketHandler() => () => new SocketsHttpHandler
     {

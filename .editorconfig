@@ -186,6 +186,7 @@ csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = true
 
 #### Naming styles ####
+
 [*.{cs,vb}]
 
 # Naming rules

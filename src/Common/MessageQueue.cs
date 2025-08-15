@@ -16,6 +16,8 @@ public sealed class MessageQueue<TModel> where TModel : class
         });
     }
 
+    public int Count => Queue.Reader.Count;
+
     public async Task EnqueueAsync(TModel request, CancellationToken cancellationToken = default)
     {
         await Queue.Writer.WriteAsync(request, cancellationToken);
@@ -29,5 +31,10 @@ public sealed class MessageQueue<TModel> where TModel : class
     public async Task<bool> WaitToReadAsync(CancellationToken cancellationToken = default)
     {
         return await Queue.Reader.WaitToReadAsync(cancellationToken);
+    }
+
+    public async Task<IEnumerable<TModel>> ReadAllAsync(CancellationToken cancellationToken)
+    {
+        return await Task.FromResult(Queue.Reader.ReadAllAsync(cancellationToken).ToBlockingEnumerable());
     }
 }

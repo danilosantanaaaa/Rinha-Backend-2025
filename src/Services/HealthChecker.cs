@@ -1,3 +1,5 @@
+using Rinha.Api.Models.Healths;
+
 namespace Rinha.Api.Services;
 
 public sealed class HealthChecker(
@@ -6,7 +8,7 @@ public sealed class HealthChecker(
 {
     private readonly Dictionary<PaymentGateway, HealthResponse> _health = new Dictionary<PaymentGateway, HealthResponse>
     {
-        { PaymentGateway.Default,  HealthResponse.Default},
+        { PaymentGateway.Default,  HealthResponse.Default },
         { PaymentGateway.Fallback, HealthResponse.Default }
     };
 
@@ -16,25 +18,27 @@ public sealed class HealthChecker(
         {
             try
             {
-                var tasks = new List<Task>()
-                {
+                await Task.WhenAll(
                     UpdateHealthyAsync(PaymentGateway.Default, cancellationToken),
-                    UpdateHealthyAsync(PaymentGateway.Fallback, cancellationToken)
-                };
-
-                await Task.WhenAll(tasks);
+                    UpdateHealthyAsync(PaymentGateway.Fallback, cancellationToken));
             }
             catch (Exception e)
             {
                 logger.LogError(e.Message, e);
             }
-        }
 
+            await Task.Delay(TimeSpan.FromMilliseconds(5), cancellationToken);
+        }
     }
 
     public void SetUpdateHealthy(PaymentGateway gateway, bool failing)
     {
         _health[gateway].Failing = failing;
+    }
+
+    public void SetUpdateHealthy(PaymentGateway gateway, HealthResponse health)
+    {
+        _health[gateway] = health;
     }
 
     public bool IsDefaultBest()
@@ -54,6 +58,10 @@ public sealed class HealthChecker(
         return fallback.IsHealthy && !@default.IsHealthy;
     }
 
+    public bool IsBothFailing() =>
+        !_health[PaymentGateway.Default].IsHealthy &&
+        !_health[PaymentGateway.Fallback].IsHealthy;
+
     private async Task UpdateHealthyAsync(PaymentGateway gateway, CancellationToken cancellationToken)
     {
         try
@@ -61,12 +69,12 @@ public sealed class HealthChecker(
             //logger.LogInformation("Get to cache {gateway} in {datetime}", gateway, DateTime.Now);
             var health = await client.GetHealthAsync(gateway, cancellationToken);
 
-            if (health.IsLocked)
+            if (health is null)
             {
                 return;
             }
 
-            _health[gateway] = health;
+            SetUpdateHealthy(gateway, health);
         }
         catch (Exception e)
         {

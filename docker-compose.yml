@@ -18,12 +18,12 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "40MB"
+          memory: "20MB"
 
   api-1: &api-service
     container_name: api-1
-    #build: .
-    image: danilosantanaaa/rinha:2025.6
+    # build: .
+    image: danilosantanaaa/rinha:2025.7
     expose:
       - "8080"
     ports:
@@ -45,16 +45,26 @@ services:
     volumes:
       - postgres-socket:/var/run/postgresql
     deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 2s
+        max_attempts: 10
+        window: 5s
       resources:
         limits:
-          cpus: "0.35"
-          memory: "95MB"
+          cpus: "0.5"
+          memory: "135MB"
   api-2:
     <<: *api-service
     container_name: api-2
     ports:
       - "3002:8080"
     hostname: api-2
+    deploy:
+      resources:
+          limits:
+            cpus: "0.4"
+            memory: "130MB"
 
   redis:
     container_name: cache
@@ -64,12 +74,12 @@ services:
       - "6379:6379"
     networks:
       - backend
-    restart: always
+    restart: on-failure
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: "20MB"
+          cpus: "0.1"
+          memory: "10MB"
 
 
   postgreSQL:
@@ -103,8 +113,8 @@ services:
         window: 5s
       resources:
         limits:
-          cpus: "0.4"
-          memory: "100MB"
+          cpus: "0.3"
+          memory: "55MB"
 
 networks:
   backend:

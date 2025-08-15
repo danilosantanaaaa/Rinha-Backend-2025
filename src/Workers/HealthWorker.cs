@@ -2,7 +2,7 @@ using Rinha.Api.Services;
 
 namespace Rinha.Api.Workers;
 
-public class HealthBackgroundService(
+public class HealthWorker(
     HealthChecker healthChecker) : BackgroundService
 {
     private readonly HealthChecker _healthChecker = healthChecker;

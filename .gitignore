@@ -485,10 +485,12 @@ $RECYCLE.BIN/
 
 pull
 
-/rinha-test/**result*
-/rinha-test/*.md
+**/rinha-test/**result*
+**/rinha-test/*.md
 
 /participantes
 
 PREVIA_RESULTADOS.md
 *info.json
+
+docker-compose.logs

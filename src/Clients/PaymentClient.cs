@@ -1,37 +1,42 @@
 using System.Net;
 
-using RedLockNet;
-
-using Rinha.Api.Services;
+using Rinha.Api.Models.Healths;
+using Rinha.Api.Models.Payments;
+using Rinha.Api.Repositories;
 
 namespace Rinha.Api.Clients;
 
 public sealed class PaymentClient(
     IHttpClientFactory httpClientFactory,
-    CacheService cache,
+    PaymentCacheRepository cache,
     IDistributedLockFactory lockFactory,
     ILogger<PaymentClient> logger)
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly CacheService _cache = cache;
+    private readonly PaymentCacheRepository _cache = cache;
     private readonly IDistributedLockFactory _lockFactory = lockFactory;
     private readonly ILogger<PaymentClient> _logger = logger;
 
     public async Task<HttpResponseMessage> PaymentAsync(
         Payment payment,
-        PaymentGateway gateway = PaymentGateway.Default,
         CancellationToken cancellationToken = default)
     {
-        HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
+        HttpClient client = _httpClientFactory.CreateClient(payment.Gateway.ToString());
 
         try
         {
-            var result = await client.PostAsJsonAsync("payments", payment, AppJsonSerializerContext.Default.Payment, cancellationToken);
+            var result = await client.PostAsJsonAsync(
+                "/payments",
+                payment,
+                AppJsonSerializerContext.Default.Payment,
+                cancellationToken);
 
             return result;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex.Message, ex);
+
             return new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.InternalServerError
@@ -44,7 +49,7 @@ public sealed class PaymentClient(
 
     }
 
-    public async Task<HealthResponse> GetHealthAsync(
+    public async Task<HealthResponse?> GetHealthAsync(
         PaymentGateway gateway = PaymentGateway.Default,
         CancellationToken cancellationToken = default)
     {
@@ -52,30 +57,31 @@ public sealed class PaymentClient(
         client.Timeout = TimeSpan.FromMilliseconds(Configuration.TimeoutInMilliseconds);
 
         using var _lock = await _lockFactory.CreateLockAsync(
-            nameof(PaymentClient),
-            TimeSpan.FromSeconds(Configuration.CacheTimeExpiryInSeconds)
-        );
-
-        if (!_lock.IsAcquired)
-        {
-            return HealthResponse.Locked;
-        }
+            resource: $"payment_{gateway}",
+            expiryTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds),
+            waitTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds),
+            retryTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds));
 
         try
         {
-            // Get for the cache
-            HealthResponse? health = await _cache.GetAsync<HealthResponse>(gateway.ToString());
+            // Get from the cache
+            HealthResponse? health = await _cache.GetHealthAsync(gateway.ToString());
 
             if (health is not null)
             {
                 return health;
             }
 
+            if (!_lock.IsAcquired)
+            {
+                _logger.LogInformation($"Resource {gateway} lock!");
+            }
+
             var result = await client.GetAsync("/payments/service-health", cancellationToken);
 
             if (!result.IsSuccessStatusCode)
             {
-                throw new Exception($"Occurred some error in {gateway} status code {result.StatusCode}");
+                throw new Exception($"Occurred some error in {gateway} with status code {result.StatusCode}");
             }
 
             health = await result.Content.ReadFromJsonAsync<HealthResponse>(
@@ -83,22 +89,23 @@ public sealed class PaymentClient(
                     cancellationToken)
                 ?? throw new NullReferenceException("Ops. Don't can be deserializer.");
 
-            await _cache.SetAsync(
+            await _cache.SetHealthAsync(
                 gateway.ToString(),
                 health,
-                TimeSpan.FromSeconds(Configuration.CacheTimeExpiryInSeconds));
+                TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds));
 
             return health;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return HealthResponse.Error;
+            _logger.LogError(ex.Message, ex);
         }
         finally
         {
             client.Dispose();
-            _lock.Dispose();
         }
+
+        return default!;
     }
 
 }

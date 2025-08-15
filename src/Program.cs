@@ -1,16 +1,9 @@
 using System.Text.Json;
 
-using Dapper;
-
-using RedLockNet;
-using RedLockNet.SERedis;
-using RedLockNet.SERedis.Configuration;
-
+using Rinha.Api.Models.Payments;
 using Rinha.Api.Repositories;
 using Rinha.Api.Services;
 using Rinha.Api.Workers;
-
-using StackExchange.Redis;
 
 [module: DapperAot]
 
@@ -29,7 +22,7 @@ var redisConnection = builder.Configuration.GetConnectionString("RedisCache")
 
 var redis = ConnectionMultiplexer.Connect(redisConnection);
 builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
-builder.Services.AddSingleton<CacheService>();
+builder.Services.AddSingleton<PaymentCacheRepository>();
 
 builder.Services.AddSingleton<IDistributedLockFactory>(_ =>
 {
@@ -49,9 +42,10 @@ builder.Services.AddHttpClient(nameof(PaymentGateway.Fallback), client =>
 
 builder.Services.AddSingleton<HealthChecker>();
 builder.Services.AddSingleton<MessageQueue<PaymentRequest>>();
+builder.Services.AddSingleton<MessageQueue<Payment>>();
 
 var connectionStrings = builder.Configuration.GetConnectionString("PostgreSQL")
-    ?? throw new InvalidOperationException("Database connection string is not configured.");
+    ?? throw new InvalidOperationException("Database connection string wasn't configured.");
 
 builder.Services.AddNpgsqlDataSource(connectionStrings);
 
@@ -59,8 +53,9 @@ builder.Services.AddScoped<PaymentService>();
 builder.Services.AddSingleton<PaymentClient>();
 builder.Services.AddScoped<PaymentRepository>();
 
-builder.Services.AddHostedService<HealthBackgroundService>();
-builder.Services.AddHostedService<PaymentBackgroundService>();
+builder.Services.AddHostedService<HealthWorker>();
+builder.Services.AddHostedService<PaymentProcessorWorker>();
+builder.Services.AddHostedService<PaymentBatchedInsertWorker>();
 ThreadPool.SetMinThreads(64, 64);
 
 var app = builder.Build();
@@ -68,10 +63,10 @@ var app = builder.Build();
 app.UseExceptionHandler();
 
 app.MapPost("payments", async (
-    MessageQueue<PaymentRequest> queue,
+    MessageQueue<PaymentRequest> requestQueue,
     PaymentRequest request) =>
 {
-    await queue.EnqueueAsync(request);
+    await requestQueue.EnqueueAsync(request);
 
     return Results.Ok();
 });
@@ -81,8 +76,15 @@ app.MapGet("payments-summary", async (
     DateTimeOffset? from,
     DateTimeOffset? to) =>
 {
-    var result = await paymentService.GetSummaryAsync(from, to);
-    return Results.Ok(result);
+    try
+    {
+        var result = await paymentService.GetSummaryAsync(from, to);
+        return Results.Ok(result);
+    }
+    catch (Exception)
+    {
+        return Results.BadRequest();
+    }
 });
 
 await app.RunAsync();

@@ -1,4 +1,4 @@
-namespace Rinha.Api.Models;
+namespace Rinha.Api.Models.Summaries;
 
 public sealed record SummaryItem(
     int TotalRequests,
