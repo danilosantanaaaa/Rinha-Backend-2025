@@ -5,23 +5,32 @@ namespace Rinha.Api.Repositories;
 
 public sealed class PaymentRepository(NpgsqlDataSource dbSource)
 {
-    public async Task<int> AddRangeAsync(IEnumerable<Payment> payments)
+    public async Task AddRangeAsync(IEnumerable<Payment> payments)
     {
         using var connection = await dbSource.OpenConnectionAsync();
+        await connection.OpenAsync();
 
         var sql = @"INSERT INTO payments (correlationId, amount, requested_at, gateway)
                   VALUES(@CorrelationId, @Amount, @Requested_At, @Gateway);";
 
-        return await connection.ExecuteAsync(sql, payments.Select(r =>
+        try
         {
-            return new
+
+            await connection.ExecuteAsync(sql, payments.Select(r =>
             {
-                r.CorrelationId,
-                r.Amount,
-                Requested_At = r.RequestedAt,
-                Gateway = r.Gateway.ToString(),
-            };
-        }));
+                return new
+                {
+                    r.CorrelationId,
+                    r.Amount,
+                    Requested_At = r.RequestedAt,
+                    Gateway = r.Gateway.ToString(),
+                };
+            }));
+        }
+        finally
+        {
+            await connection.CloseAsync();
+        }
     }
 
     public async Task<SummaryResponse> GetSummaryAsync(DateTimeOffset? fromUtc, DateTimeOffset? toUtc)
