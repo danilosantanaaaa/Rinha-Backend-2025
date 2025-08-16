@@ -30,14 +30,14 @@ public sealed class PaymentBatchedInsertWorker(
             {
                 _logger.LogError(ex.Message, ex);
 
-                // Por precaução caso o Zan derrube o banco de dado, dar ruim se api cai com os dados.
+                // Só por precaução caso o Zan derrube o banco de dado, se cai api deu ruim :)
                 foreach (var payment in payments)
                 {
                     await _processedQueue.EnqueueAsync(payment, stoppingToken);
                 }
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(5), stoppingToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(700), stoppingToken);
         }
     }
 }

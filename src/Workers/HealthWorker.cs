@@ -20,10 +20,11 @@ public class HealthWorker(
             catch (Exception e)
             {
                 _logger.LogError(e.Message, e);
+                await Task.Delay(TimeSpan.FromMilliseconds(1000), stoppingToken);
             }
             finally
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(5050), stoppingToken);
+                await Task.Delay(TimeSpan.FromMilliseconds(5000), stoppingToken);
             }
 
         }

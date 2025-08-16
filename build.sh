@@ -64,6 +64,7 @@ testar() {
     popd > /dev/null
 }
 
+
 stopContainers
 startContainers
 
@@ -80,10 +81,11 @@ while [ $success -ne 0 ] && [ $max_attempts -ge $attempt ]; do
 done
 
 if [ $success -eq 0 ]; then
-    testar
-    stopContainers
 
-    if [ "$param" = "logs" ]; then
+    testar
+    stopContainers    
+
+    if [[ "$param" = "logs" ]]; then
         # Trucando em 1000 linhas
         sed -i '1001,$d' $dockerlogs
     fi

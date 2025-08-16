@@ -19,13 +19,15 @@ public sealed class HealthChecker(
             UpdateHealthyAsync(PaymentGateway.Fallback, cancellationToken));
     }
 
-    public void SetUpdateHealthy(PaymentGateway gateway, bool failing)
+    public void UpdateHealth(PaymentGateway gateway, bool failing)
     {
+        logger.LogInformation("PaymentProcess Failing: {0}", gateway);
         _health[gateway].Failing = failing;
     }
 
-    public void SetUpdateHealthy(PaymentGateway gateway, HealthResponse health)
+    public void UpdateHealth(PaymentGateway gateway, HealthResponse health)
     {
+        logger.LogInformation("PaymentProcess Failing: {0} {1}", gateway, health);
         _health[gateway] = health;
     }
 
@@ -34,16 +36,13 @@ public sealed class HealthChecker(
         var @default = _health[PaymentGateway.Default];
         var fallback = _health[PaymentGateway.Fallback];
 
-        return @default.IsHealthy && !fallback.IsHealthy ||
-            @default.IsHealthy && @default.MinResponseTime <= fallback.MinResponseTime;
-    }
+        if (@default.IsHealthy && !fallback.IsHealthy)
+        {
+            return true;
+        }
 
-    public bool IsFallbackBest()
-    {
-        var @default = _health[PaymentGateway.Default];
-        var fallback = _health[PaymentGateway.Fallback];
-
-        return fallback.IsHealthy && !@default.IsHealthy;
+        return
+            @default.IsHealthy && fallback.IsHealthy && @default.MinResponseTime <= fallback.MinResponseTime;
     }
 
     public bool IsBothFailing() =>
@@ -54,15 +53,15 @@ public sealed class HealthChecker(
     {
         try
         {
-            //logger.LogInformation("Get to cache {gateway} in {datetime}", gateway, DateTime.Now);
             var health = await client.GetHealthAsync(gateway, cancellationToken);
 
+            // Significa que foi bloqueado pela outra api ou deu erro
             if (health is null)
             {
                 return;
             }
-
-            SetUpdateHealthy(gateway, health);
+        
+            UpdateHealth(gateway, health);
         }
         catch (Exception e)
         {

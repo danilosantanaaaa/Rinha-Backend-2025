@@ -54,27 +54,25 @@ public sealed class PaymentClient(
         CancellationToken cancellationToken = default)
     {
         HttpClient client = _httpClientFactory.CreateClient(gateway.ToString());
-        client.Timeout = TimeSpan.FromMilliseconds(Configuration.TimeoutInMilliseconds);
 
         using var _lock = await _lockFactory.CreateLockAsync(
             resource: $"payment_{gateway}",
-            expiryTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds),
-            waitTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds),
-            retryTime: TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds));
+            expiryTime: TimeSpan.FromMicroseconds(5010));
 
         try
         {
+            if (!_lock.IsAcquired)
+            {
+                _logger.LogInformation($"Resource {gateway} lock!");
+                return null;
+            }
+
             // Get from the cache
             HealthResponse? health = await _cache.GetHealthAsync(gateway.ToString());
 
             if (health is not null)
             {
                 return health;
-            }
-
-            if (!_lock.IsAcquired)
-            {
-                _logger.LogInformation($"Resource {gateway} lock!");
             }
 
             var result = await client.GetAsync("/payments/service-health", cancellationToken);
@@ -92,7 +90,7 @@ public sealed class PaymentClient(
             await _cache.SetHealthAsync(
                 gateway.ToString(),
                 health,
-                TimeSpan.FromSeconds(Configuration.CacheLockedInSeconds));
+                TimeSpan.FromMilliseconds(5010));
 
             return health;
         }

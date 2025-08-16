@@ -40,39 +40,36 @@ public sealed class PaymentService
 
         try
         {
-            bool isOk = false;
-
-            // Default
-            if (_healthChecker.IsDefaultBest())
+            if (_healthChecker.IsBothFailing())
             {
-                payment.Gateway = PaymentGateway.Default;
-                var result = await _paymentClient.PaymentAsync(payment);
-                isOk = result.IsSuccessStatusCode;
-            }
-            else
-            {
-                _healthChecker.SetUpdateHealthy(PaymentGateway.Default, false);
+                throw new Exception("Both services is unhealthy.");
             }
 
-            // Fallback
-            if (_healthChecker.IsFallbackBest())
+            payment.Gateway = _healthChecker.IsDefaultBest()
+                ? PaymentGateway.Default
+                : PaymentGateway.Fallback;
+
+            for (int attempt = 0; attempt < 3; attempt++)
             {
-                payment.Gateway = PaymentGateway.Default;
-                var result = await _paymentClient.PaymentAsync(payment);
-                isOk = result.IsSuccessStatusCode;
-            }
-            else
-            {
-                _healthChecker.SetUpdateHealthy(PaymentGateway.Fallback, false);
+                var result = await _paymentClient.PaymentAsync(payment, cancellationToken);
+                if (result.IsSuccessStatusCode)
+                {
+                    await _processedQueue.EnqueueAsync(payment, cancellationToken);
+                    return;
+                }
+                else
+                {
+                    _healthChecker.UpdateHealth(
+                        gateway: payment.Gateway,
+                        failing: true);
+                }
+
+                payment.Gateway = payment.Gateway == PaymentGateway.Default
+                    ? PaymentGateway.Fallback
+                    : PaymentGateway.Default;
             }
 
-            if (isOk)
-            {
-                await _processedQueue.EnqueueAsync(payment, cancellationToken);
-                return;
-            }
-
-            throw new Exception("Both services unavailable.");
+            throw new Exception("No attempt was successful in 3 attempt.");
         }
         catch (Exception ex)
         {

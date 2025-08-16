@@ -1,16 +1,14 @@
 name: DaniloSantanaRB2025
 
 services:
+
   load-balancer:
     container_name: load-balancer
     image: nginx:latest
     ports:
       - "9999:9999"
-    user: root
     volumes:
-      - ./nginx/socket-permission.sh:/docker-entrypoint.d/socket-permission.sh
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - nginx-socket:/run:rw
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api-1
       - api-2
@@ -20,12 +18,12 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: "15MB"
+          memory: "20MB"
 
   api-1: &api-service
     container_name: api-1
     #build: .
-    image: danilosantanaaa/rinha:2025.8
+    image: danilosantanaaa/rinha:2025.9
     expose:
       - "8080"
     ports:
@@ -34,11 +32,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__PostgreSQL=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=4;Maximum Pool Size=20;Connection Pruning Interval=3
+      - ConnectionStrings__PostgreSQL=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=5;Maximum Pool Size=20;Connection Pruning Interval=3
       - ConnectionStrings__RedisCache=redis:6379,abortConnect=false,connectTimeout=30000,responseTimeout=30000
       - PaymentProcessorDefault=http://payment-processor-default:8080
       - PaymentProcessorFallback=http://payment-processor-fallback:8080
-      - ServerName=api_1
     depends_on:
       - postgreSQL
       - redis
@@ -47,7 +44,6 @@ services:
       - payment-processor
     volumes:
       - postgres-socket:/var/run/postgresql
-      - nginx-socket:/run:rw 
     deploy:
       restart_policy:
         condition: on-failure
@@ -57,26 +53,18 @@ services:
       resources:
         limits:
           cpus: "0.4"
-          memory: "116MB"
+          memory: "105MB"
   api-2:
     <<: *api-service
     container_name: api-2
     ports:
       - "3002:8080"
     hostname: api-2
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__PostgreSQL=Host=/var/run/postgresql;Port=5432;Database=rinha;Username=postgres;Password=postgres;Pooling=true;Minimum Pool Size=4;Maximum Pool Size=20;Connection Pruning Interval=3
-      - ConnectionStrings__RedisCache=redis:6379,abortConnect=false,connectTimeout=30000,responseTimeout=30000
-      - PaymentProcessorDefault=http://payment-processor-default:8080
-      - PaymentProcessorFallback=http://payment-processor-fallback:8080
-      - ServerName=api_2
     deploy:
       resources:
           limits:
-            cpus: "0.4"
-            memory: "110MB"
+            cpus: "0.3"
+            memory: "105MB"
 
   redis:
     container_name: cache
@@ -91,7 +79,8 @@ services:
       resources:
         limits:
           cpus: "0.1"
-          memory: "9MB"
+          memory: "10MB"
+
 
   postgreSQL:
     container_name: database
@@ -124,8 +113,8 @@ services:
         window: 5s
       resources:
         limits:
-          cpus: "0.4"
-          memory: "100MB"
+          cpus: "0.5"
+          memory: "110MB"
 
 networks:
   backend:
@@ -138,4 +127,3 @@ networks:
 
 volumes:
   postgres-socket:
-  nginx-socket:

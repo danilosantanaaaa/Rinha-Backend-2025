@@ -55,15 +55,7 @@ public class PaymentProcessorWorker : BackgroundService
             }
             finally
             {
-                // To ensure there is enough time to save to the database.
-                if (_healthChecker.IsBothFailing())
-                {
-                    await Task.Delay(10, stoppingToken);
-                }
-                else
-                {
-                    await Task.Delay(30, stoppingToken);
-                }
+                await Task.Delay(TimeSpan.FromMilliseconds(10), stoppingToken);
             }
         }
     }

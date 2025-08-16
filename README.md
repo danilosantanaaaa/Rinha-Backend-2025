@@ -16,5 +16,6 @@ Um esquema basico de como irá funcionar o sistema. As limitações de hardware 
 - .NET Core
 - PostgreSQL
 - Nginx
+- Redis
 - Docker
 - Docker Compose

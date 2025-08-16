@@ -8,7 +8,6 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
     public async Task AddRangeAsync(IEnumerable<Payment> payments)
     {
         using var connection = await dbSource.OpenConnectionAsync();
-        await connection.OpenAsync();
 
         var sql = @"INSERT INTO payments (correlationId, amount, requested_at, gateway)
                   VALUES(@CorrelationId, @Amount, @Requested_At, @Gateway);";
@@ -38,7 +37,10 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
 
         using var connection = await dbSource.OpenConnectionAsync();
 
-        const string sql = @"
+        try
+        {
+
+            const string sql = @"
                 SELECT gateway,
                     COUNT(*) AS TotalRequests,
                     SUM(amount) AS TotalAmount
@@ -48,20 +50,25 @@ public sealed class PaymentRepository(NpgsqlDataSource dbSource)
                     OR @toUtc is NULL
                 GROUP BY gateway;";
 
-        var result = await connection.QueryAsync<Summary>(sql, new
+            var result = await connection.QueryAsync<Summary>(sql, new
+            {
+                fromUtc,
+                toUtc
+            });
+
+            var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default.ToString())
+                ?? new Summary(PaymentGateway.Default.ToString(), 0, 0);
+
+            var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback.ToString())
+                ?? new Summary(PaymentGateway.Fallback.ToString(), 0, 0);
+
+            return new SummaryResponse(
+                new SummaryItem(@default.TotalRequests, @default.TotalAmount),
+                new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
+        }
+        finally
         {
-            fromUtc,
-            toUtc
-        });
-
-        var @default = result.FirstOrDefault(x => x.gateway == PaymentGateway.Default.ToString())
-            ?? new Summary(PaymentGateway.Default.ToString(), 0, 0);
-
-        var fallback = result.FirstOrDefault(x => x.gateway == PaymentGateway.Fallback.ToString())
-            ?? new Summary(PaymentGateway.Fallback.ToString(), 0, 0);
-
-        return new SummaryResponse(
-            new SummaryItem(@default.TotalRequests, @default.TotalAmount),
-            new SummaryItem(fallback.TotalRequests, fallback.TotalAmount));
+            await connection.CloseAsync();
+        }
     }
 }
