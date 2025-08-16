@@ -7,7 +7,7 @@ Coloca em prática o processamento de pagamentos com recursos limitados, lidando
 
 ## System Design
 
-Um esquema basico de como irá funcionar o sistema. As limitações de hardware está no docker-compose.
+Um esquema basico de como irá funcionar a API. As limitações de hardware está no docker-compose.
 
 ![Systen Design](/assets/SystemDesign.svg)
 
