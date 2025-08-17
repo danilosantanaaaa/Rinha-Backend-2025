@@ -51,7 +51,7 @@ startContainers(){
 
 MAX_REQUESTS=550
 testar() {
-    # Realizar os teste
+    # Realizar os testes
     pushd ./tests/rinha-test > /dev/null
     
     if [ "$param" = "dash" ]; then

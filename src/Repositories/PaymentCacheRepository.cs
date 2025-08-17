@@ -15,7 +15,9 @@ public sealed class PaymentCacheRepository(IConnectionMultiplexer redis)
     {
         var db = _redis.GetDatabase();
 
-        var json = JsonSerializer.Serialize(value, AppJsonSerializerContext.Default.HealthResponse);
+        var json = JsonSerializer.Serialize(
+            value,
+            AppJsonSerializerContext.Default.HealthResponse);
 
         await db.StringSetAsync(key, json, expiry);
     }
@@ -26,7 +28,9 @@ public sealed class PaymentCacheRepository(IConnectionMultiplexer redis)
         var json = await db.StringGetAsync(key);
 
         return json.HasValue
-            ? JsonSerializer.Deserialize(json!, AppJsonSerializerContext.Default.HealthResponse)
+            ? JsonSerializer.Deserialize(
+                json!,
+                AppJsonSerializerContext.Default.HealthResponse)
             : default;
     }
 }

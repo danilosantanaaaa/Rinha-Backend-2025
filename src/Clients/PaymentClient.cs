@@ -82,7 +82,7 @@ public sealed class PaymentClient(
                 throw new Exception($"Occurred some error in {gateway} with status code {result.StatusCode}");
             }
 
-            health = await result.Content.ReadFromJsonAsync<HealthResponse>(
+            health = await result.Content.ReadFromJsonAsync(
                     AppJsonSerializerContext.Default.HealthResponse,
                     cancellationToken)
                 ?? throw new NullReferenceException("Ops. Don't can be deserializer.");
@@ -103,7 +103,7 @@ public sealed class PaymentClient(
             client.Dispose();
         }
 
-        return default!;
+        return null;
     }
 
 }

@@ -4,30 +4,20 @@ using Rinha.Api.Repositories;
 
 namespace Rinha.Api.Services;
 
-public sealed class PaymentService
+public sealed class PaymentService(
+    PaymentRepository paymentRepository,
+    PaymentClient paymentClient,
+    ILogger<PaymentService> logger,
+    MessageQueue<Payment> processedQueue,
+    MessageQueue<PaymentRequest> requestQueue,
+    HealthChecker healthBreaker)
 {
-    private readonly PaymentRepository _paymentRepository;
-    private readonly PaymentClient _paymentClient;
-    private readonly ILogger<PaymentService> _logger;
-    private readonly HealthChecker _healthChecker;
-    private readonly MessageQueue<Payment> _processedQueue;
-    private readonly MessageQueue<PaymentRequest> _requestQueue;
-
-    public PaymentService(
-        PaymentRepository paymentRepository,
-        PaymentClient paymentClient,
-        ILogger<PaymentService> logger,
-        MessageQueue<Payment> processedQueue,
-        MessageQueue<PaymentRequest> requestQueue,
-        HealthChecker healthBreaker)
-    {
-        _paymentRepository = paymentRepository;
-        _paymentClient = paymentClient;
-        _logger = logger;
-        _processedQueue = processedQueue;
-        _requestQueue = requestQueue;
-        _healthChecker = healthBreaker;
-    }
+    private readonly PaymentRepository _paymentRepository = paymentRepository;
+    private readonly PaymentClient _paymentClient = paymentClient;
+    private readonly ILogger<PaymentService> _logger = logger;
+    private readonly HealthChecker _healthChecker = healthBreaker;
+    private readonly MessageQueue<Payment> _processedQueue = processedQueue;
+    private readonly MessageQueue<PaymentRequest> _requestQueue = requestQueue;
 
     public async Task ProcessAsync(
         PaymentRequest request,
@@ -84,8 +74,9 @@ public sealed class PaymentService
         {
             return await _paymentRepository.GetSummaryAsync(fromUtc, toUtc);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex.Message, ex);
             throw;
         }
     }

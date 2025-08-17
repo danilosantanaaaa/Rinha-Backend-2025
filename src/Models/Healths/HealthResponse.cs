@@ -4,6 +4,16 @@ namespace Rinha.Api.Models.Healths;
 
 public sealed class HealthResponse
 {
+    private HealthResponse(bool failing, int minResponseTime)
+    {
+        Failing = failing;
+        MinResponseTime = minResponseTime;
+    }
+
+    [JsonConstructor]
+    public HealthResponse()
+    { }
+
     [JsonPropertyName("failing")]
     public bool Failing { get; set; }
 
@@ -15,14 +25,4 @@ public sealed class HealthResponse
 
     [JsonIgnore]
     public static HealthResponse Default = new HealthResponse(false, 0);
-
-    public HealthResponse(bool failing, int minResponseTime)
-    {
-        Failing = failing;
-        MinResponseTime = minResponseTime;
-    }
-
-    [JsonConstructor]
-    public HealthResponse()
-    { }
 }

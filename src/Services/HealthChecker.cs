@@ -55,12 +55,12 @@ public sealed class HealthChecker(
         {
             var health = await client.GetHealthAsync(gateway, cancellationToken);
 
-            // Significa que foi bloqueado pela outra api ou deu erro
+            // It meaning it was locked for another api or some error occurred
             if (health is null)
             {
                 return;
             }
-        
+
             UpdateHealth(gateway, health);
         }
         catch (Exception e)
